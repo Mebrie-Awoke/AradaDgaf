@@ -330,8 +330,8 @@ class NamedResourcesView(APIView):
         return paginate_mongo(get_database()[resource], request, {"is_active": {"$ne": False}}, [("name", 1)])
 
     def post(self, request, resource):
-        self.permission_classes = [IsAdmin]
-        self.check_permissions(request)
+        if request.user.role != "admin":
+            raise PermissionDenied("Administrator access is required.")
         serializer = NamedResourceSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         document = {**serializer.validated_data, "created_at": now(), "is_active": True}
@@ -355,8 +355,16 @@ class TicketAttachmentsView(APIView):
         })
         serializer.is_valid(raise_exception=True)
         extension = Path(uploaded.name).suffix.lower()
-        if extension not in {".pdf", ".jpg", ".jpeg", ".png", ".txt", ".zip", ".docx"}:
-            raise ValidationError({"file": "File extension is not allowed."})
+        allowed_extensions = {
+            "application/pdf": {".pdf"},
+            "image/jpeg": {".jpg", ".jpeg"},
+            "image/png": {".png"},
+            "text/plain": {".txt"},
+            "application/zip": {".zip"},
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document": {".docx"},
+        }
+        if extension not in allowed_extensions[serializer.validated_data["content_type"]]:
+            raise ValidationError({"file": "File extension does not match the declared content type."})
         prefix = uploaded.read(16)
         uploaded.seek(0)
         expected = {

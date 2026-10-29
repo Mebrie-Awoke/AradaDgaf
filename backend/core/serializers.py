@@ -73,7 +73,7 @@ class AttachmentMetadataSerializer(serializers.Serializer):
     storage_key = serializers.CharField(max_length=512, trim_whitespace=True)
 
     def validate_filename(self, value):
-        if os.path.basename(value) != value or value in {".", ".."}:
+        if os.path.basename(value) != value or "/" in value or "\\" in value or value in {".", ".."}:
             raise serializers.ValidationError("Filename must not contain a path.")
         return value
 

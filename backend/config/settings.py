@@ -25,7 +25,7 @@ load_dotenv(BASE_DIR.parent / ".env")
 # See https://docs.djangoproject.com/en/6.1/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-DEBUG = os.getenv("DJANGO_DEBUG", "true").lower() == "true"
+DEBUG = os.getenv("DJANGO_DEBUG", "false").lower() == "true"
 SECRET_KEY = os.getenv("DJANGO_SECRET_KEY") or secrets.token_urlsafe(48)
 
 ALLOWED_HOSTS = [host.strip() for host in os.getenv(
@@ -50,6 +50,7 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "corsheaders.middleware.CorsMiddleware",
+    "core.middleware.RequestSizeLimitMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -163,7 +164,10 @@ MONGODB_DATABASE = os.getenv("MONGODB_DATABASE", "nexora")
 MONGODB_SERVER_SELECTION_TIMEOUT_MS = int(os.getenv("MONGODB_TIMEOUT_MS", "5000"))
 ACCESS_TOKEN_TTL_SECONDS = int(os.getenv("ACCESS_TOKEN_TTL_SECONDS", "43200"))
 MAX_ATTACHMENT_BYTES = int(os.getenv("MAX_ATTACHMENT_BYTES", str(5 * 1024 * 1024)))
-PRIVATE_UPLOAD_ROOT = Path(os.getenv("PRIVATE_UPLOAD_ROOT", str(BASE_DIR / "private_uploads"))).resolve()
+PRIVATE_UPLOAD_ROOT = Path(os.getenv("PRIVATE_UPLOAD_ROOT", str(BASE_DIR / "private_uploads")))
+if not PRIVATE_UPLOAD_ROOT.is_absolute():
+    PRIVATE_UPLOAD_ROOT = BASE_DIR.parent / PRIVATE_UPLOAD_ROOT
+PRIVATE_UPLOAD_ROOT = PRIVATE_UPLOAD_ROOT.resolve()
 
 REST_FRAMEWORK["DEFAULT_THROTTLE_CLASSES"] = [
     "rest_framework.throttling.AnonRateThrottle",
@@ -171,7 +175,7 @@ REST_FRAMEWORK["DEFAULT_THROTTLE_CLASSES"] = [
 ]
 REST_FRAMEWORK["DEFAULT_THROTTLE_RATES"] = {"anon": "30/hour", "user": "1200/hour"}
 
-if not DEBUG and not os.getenv("DJANGO_SECRET_KEY"):
+if os.getenv("DJANGO_ENV", "development").lower() == "production" and not os.getenv("DJANGO_SECRET_KEY"):
     raise RuntimeError("DJANGO_SECRET_KEY must be configured when DJANGO_DEBUG is false.")
 
 
