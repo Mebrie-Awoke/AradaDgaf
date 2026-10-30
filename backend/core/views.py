@@ -1,14 +1,21 @@
 import hashlib
+import logging
 import re
 import secrets
+import zipfile
 from datetime import datetime, timedelta, timezone
+from io import BytesIO
 from pathlib import Path
 from uuid import uuid4
 
 from bson import ObjectId
 from django.conf import settings
 from django.contrib.auth.hashers import check_password, make_password
+from django.core.files.base import ContentFile
+from django.core.files.storage import storages
+from django.http import FileResponse
 from pymongo import DESCENDING, ReturnDocument
+from pymongo.errors import PyMongoError
 from rest_framework import status
 from rest_framework.exceptions import APIException, AuthenticationFailed, NotFound, PermissionDenied, ValidationError
 from rest_framework.parsers import FormParser, MultiPartParser
@@ -25,6 +32,15 @@ from .serializers import (
     TicketCreateSerializer, TicketUpdateSerializer,
 )
 from .utils import json_safe, public_user
+
+
+logger = logging.getLogger(__name__)
+
+
+class AttachmentStorageUnavailable(APIException):
+    status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+    default_detail = "Attachment storage is temporarily unavailable."
+    default_code = "storage_unavailable"
 
 
 def now():
@@ -77,6 +93,71 @@ def get_ticket(database, ticket_id):
 def check_ticket_access(user, ticket):
     if not can_access_ticket(user, ticket):
         raise NotFound("Ticket not found.")
+
+
+def private_attachment_storage():
+    try:
+        return storages["private_attachments"]
+    except Exception as exc:
+        logger.exception("Could not initialize private attachment storage")
+        raise AttachmentStorageUnavailable() from exc
+
+
+def public_attachment(document):
+    result = json_safe(document)
+    result.pop("storage_key", None)
+    return result
+
+
+def valid_attachment_content(content_type, data):
+    if content_type == "application/pdf":
+        return data.startswith(b"%PDF-")
+    if content_type == "image/jpeg":
+        return data.startswith(b"\xff\xd8\xff") and data.endswith(b"\xff\xd9")
+    if content_type == "image/png":
+        return data.startswith(b"\x89PNG\r\n\x1a\n") and b"IEND" in data[-16:]
+    if content_type == "text/plain":
+        try:
+            data.decode("utf-8-sig")
+        except UnicodeDecodeError:
+            return False
+        return b"\x00" not in data
+    if content_type in {
+        "application/zip",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    }:
+        try:
+            with zipfile.ZipFile(BytesIO(data)) as archive:
+                names = archive.namelist()
+                if len(names) > 10000:
+                    return False
+                if content_type == "application/zip":
+                    return bool(names)
+                return "[Content_Types].xml" in names and "word/document.xml" in names
+        except (OSError, zipfile.BadZipFile):
+            return False
+    return False
+
+
+def validate_storage_key(storage_key, ticket_id):
+    if not isinstance(storage_key, str):
+        return False
+    prefix = f"{ticket_id}/"
+    if not storage_key.startswith(prefix):
+        return False
+    filename = storage_key[len(prefix):]
+    return re.fullmatch(r"[0-9a-f]{32}\.(?:pdf|jpg|jpeg|png|txt|zip|docx)", filename) is not None
+
+
+def cleanup_failed_attachment(database, storage, storage_key):
+    try:
+        database.attachments.delete_one({"storage_key": storage_key})
+    except PyMongoError:
+        logger.exception("Could not roll back attachment metadata for storage key %s", storage_key)
+    try:
+        storage.delete(storage_key)
+    except Exception:
+        logger.exception("Could not remove failed attachment file with storage key %s", storage_key)
 
 
 class HealthCheckView(APIView):
@@ -350,58 +431,114 @@ class TicketAttachmentsView(APIView):
         uploaded = request.FILES.get("file")
         if uploaded is None:
             raise ValidationError({"file": "Upload a file using the 'file' field."})
+        filename = uploaded.name
+        if (
+            not filename
+            or len(filename) > 255
+            or "/" in filename
+            or "\\" in filename
+            or filename in {".", ".."}
+        ):
+            raise ValidationError({"file": "Filename must be a simple filename without a path."})
+        if uploaded.size > settings.MAX_ATTACHMENT_BYTES:
+            raise ValidationError({"file": "File exceeds the maximum allowed size."})
+        extension = Path(filename).suffix.lower()
+        content_types = {
+            ".pdf": "application/pdf",
+            ".jpg": "image/jpeg",
+            ".jpeg": "image/jpeg",
+            ".png": "image/png",
+            ".txt": "text/plain",
+            ".zip": "application/zip",
+            ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        }
+        content_type = content_types.get(extension)
+        reported_type = (uploaded.content_type or "").lower()
+        if not content_type or (
+            reported_type
+            and reported_type != "application/octet-stream"
+            and reported_type != content_type
+        ):
+            raise ValidationError({"file": "File extension does not match the declared content type."})
+        data = uploaded.read()
         serializer = AttachmentMetadataSerializer(data={
-            "filename": uploaded.name, "content_type": uploaded.content_type or "", "size": uploaded.size,
+            "filename": filename, "content_type": content_type, "size": len(data),
         })
         serializer.is_valid(raise_exception=True)
-        extension = Path(uploaded.name).suffix.lower()
-        allowed_extensions = {
-            "application/pdf": {".pdf"},
-            "image/jpeg": {".jpg", ".jpeg"},
-            "image/png": {".png"},
-            "text/plain": {".txt"},
-            "application/zip": {".zip"},
-            "application/vnd.openxmlformats-officedocument.wordprocessingml.document": {".docx"},
-        }
-        if extension not in allowed_extensions[serializer.validated_data["content_type"]]:
-            raise ValidationError({"file": "File extension does not match the declared content type."})
-        prefix = uploaded.read(16)
-        uploaded.seek(0)
-        expected = {
-            "application/pdf": prefix.startswith(b"%PDF-"),
-            "image/jpeg": prefix.startswith(b"\xff\xd8\xff"),
-            "image/png": prefix.startswith(b"\x89PNG\r\n\x1a\n"),
-            "text/plain": b"\x00" not in prefix,
-            "application/zip": prefix.startswith(b"PK\x03\x04"),
-            "application/vnd.openxmlformats-officedocument.wordprocessingml.document": prefix.startswith(b"PK\x03\x04"),
-        }
-        if not expected[serializer.validated_data["content_type"]]:
+        if uploaded.size != len(data) or not valid_attachment_content(content_type, data):
             raise ValidationError({"file": "File content does not match the declared content type."})
         storage_key = f"{ticket['_id']}/{uuid4().hex}{extension}"
-        path = settings.PRIVATE_UPLOAD_ROOT / storage_key
-        path.parent.mkdir(parents=True, exist_ok=True)
+        storage = private_attachment_storage()
         try:
-            with path.open("xb") as destination:
-                for chunk in uploaded.chunks():
-                    destination.write(chunk)
-        except OSError as exc:
-            raise APIException("Unable to store attachment.") from exc
+            saved_key = storage.save(storage_key, ContentFile(data))
+        except Exception as exc:
+            try:
+                storage.delete(storage_key)
+            except Exception:
+                logger.exception("Could not remove a partially saved attachment")
+            logger.exception("Could not save an attachment")
+            raise AttachmentStorageUnavailable() from exc
+        if saved_key != storage_key or not validate_storage_key(saved_key, ticket["_id"]):
+            try:
+                storage.delete(saved_key)
+            except Exception:
+                logger.exception("Could not remove attachment saved under an unexpected storage key")
+            raise AttachmentStorageUnavailable("Storage returned an invalid attachment key.")
         attachment = {
             "ticket_id": ticket["_id"], "uploaded_by": ObjectId(request.user.id),
             "filename": serializer.validated_data["filename"],
             "content_type": serializer.validated_data["content_type"],
-            "size": serializer.validated_data["size"], "storage_key": storage_key, "created_at": now(),
+            "size": serializer.validated_data["size"], "storage_key": saved_key, "created_at": now(),
         }
-        inserted = database.attachments.insert_one(attachment)
-        attachment["_id"] = inserted.inserted_id
-        insert_audit(database, ticket, request.user, "attachment_added", {"attachment_id": str(inserted.inserted_id)})
-        return success(attachment, status.HTTP_201_CREATED)
+        try:
+            inserted = database.attachments.insert_one(attachment)
+            attachment["_id"] = inserted.inserted_id
+            insert_audit(database, ticket, request.user, "attachment_added", {"attachment_id": str(inserted.inserted_id)})
+        except PyMongoError:
+            cleanup_failed_attachment(database, storage, saved_key)
+            raise
+        return success(public_attachment(attachment), status.HTTP_201_CREATED)
 
     def get(self, request, ticket_id):
         database = get_database()
         ticket = get_ticket(database, ticket_id)
         check_ticket_access(request.user, ticket)
-        return paginate_mongo(database.attachments, request, {"ticket_id": ticket["_id"]}, [("created_at", DESCENDING)])
+        return paginate_mongo(
+            database.attachments, request, {"ticket_id": ticket["_id"]},
+            [("created_at", DESCENDING)], transform=public_attachment,
+        )
+
+
+class TicketAttachmentDownloadView(APIView):
+    def get(self, request, ticket_id, attachment_id):
+        database = get_database()
+        ticket = get_ticket(database, ticket_id)
+        check_ticket_access(request.user, ticket)
+        attachment = database.attachments.find_one({
+            "_id": parse_object_id(attachment_id, "attachment_id"),
+            "ticket_id": ticket["_id"],
+        })
+        if not attachment:
+            raise NotFound("Attachment not found.")
+        storage_key = attachment.get("storage_key")
+        if not validate_storage_key(storage_key, ticket["_id"]):
+            raise AttachmentStorageUnavailable("Attachment storage metadata is invalid.")
+        storage = private_attachment_storage()
+        try:
+            uploaded_file = storage.open(storage_key, "rb")
+        except FileNotFoundError as exc:
+            raise NotFound("Attachment file not found.") from exc
+        except Exception as exc:
+            logger.exception("Could not open attachment storage key %s", storage_key)
+            raise AttachmentStorageUnavailable() from exc
+        response = FileResponse(
+            uploaded_file,
+            as_attachment=True,
+            filename=attachment["filename"],
+            content_type=attachment["content_type"],
+        )
+        response["Cache-Control"] = "private, no-store"
+        return response
 
 
 class NotificationsView(APIView):

@@ -1,7 +1,12 @@
+import logging
+
 from rest_framework.exceptions import APIException
 from rest_framework.response import Response
 from rest_framework.views import exception_handler
 from pymongo.errors import DuplicateKeyError, PyMongoError
+
+
+logger = logging.getLogger(__name__)
 
 
 def api_exception_handler(exc, context):
@@ -19,4 +24,8 @@ def api_exception_handler(exc, context):
         else:
             response.data = {"success": False, "error": {"detail": detail}}
         return response
+    logger.error(
+        "Unhandled API exception",
+        exc_info=(type(exc), exc, exc.__traceback__),
+    )
     return Response({"success": False, "error": {"detail": "An unexpected error occurred."}}, status=500)

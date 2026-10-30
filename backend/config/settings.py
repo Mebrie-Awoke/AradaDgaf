@@ -10,6 +10,7 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/6.1/ref/settings/
 """
 
+import json
 import os
 import secrets
 from pathlib import Path
@@ -164,10 +165,30 @@ MONGODB_DATABASE = os.getenv("MONGODB_DATABASE", "nexora")
 MONGODB_SERVER_SELECTION_TIMEOUT_MS = int(os.getenv("MONGODB_TIMEOUT_MS", "5000"))
 ACCESS_TOKEN_TTL_SECONDS = int(os.getenv("ACCESS_TOKEN_TTL_SECONDS", "43200"))
 MAX_ATTACHMENT_BYTES = int(os.getenv("MAX_ATTACHMENT_BYTES", str(5 * 1024 * 1024)))
-PRIVATE_UPLOAD_ROOT = Path(os.getenv("PRIVATE_UPLOAD_ROOT", str(BASE_DIR / "private_uploads")))
+PRIVATE_UPLOAD_ROOT = Path(os.getenv("PRIVATE_UPLOAD_ROOT", str(BASE_DIR.parent / "private_uploads")))
 if not PRIVATE_UPLOAD_ROOT.is_absolute():
     PRIVATE_UPLOAD_ROOT = BASE_DIR.parent / PRIVATE_UPLOAD_ROOT
 PRIVATE_UPLOAD_ROOT = PRIVATE_UPLOAD_ROOT.resolve()
+PRIVATE_STORAGE_BACKEND = os.getenv(
+    "PRIVATE_STORAGE_BACKEND", "django.core.files.storage.FileSystemStorage"
+).strip()
+try:
+    PRIVATE_STORAGE_OPTIONS = json.loads(os.getenv("PRIVATE_STORAGE_OPTIONS", "{}"))
+except json.JSONDecodeError as exc:
+    raise RuntimeError("PRIVATE_STORAGE_OPTIONS must be a JSON object.") from exc
+if not isinstance(PRIVATE_STORAGE_OPTIONS, dict):
+    raise RuntimeError("PRIVATE_STORAGE_OPTIONS must be a JSON object.")
+if PRIVATE_STORAGE_BACKEND == "django.core.files.storage.FileSystemStorage":
+    PRIVATE_STORAGE_OPTIONS.setdefault("location", str(PRIVATE_UPLOAD_ROOT))
+
+STORAGES = {
+    "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+    "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
+    "private_attachments": {
+        "BACKEND": PRIVATE_STORAGE_BACKEND,
+        "OPTIONS": PRIVATE_STORAGE_OPTIONS,
+    },
+}
 
 REST_FRAMEWORK["DEFAULT_THROTTLE_CLASSES"] = [
     "rest_framework.throttling.AnonRateThrottle",

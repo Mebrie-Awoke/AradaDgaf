@@ -1,13 +1,19 @@
+from io import BytesIO
 from datetime import datetime, timezone
+from tempfile import TemporaryDirectory
 from unittest.mock import MagicMock, patch
 
 from bson import ObjectId
 from django.contrib.auth.hashers import check_password, make_password
-from django.test import TestCase
+from django.core.files.uploadedfile import SimpleUploadedFile
+from django.core.files.storage import FileSystemStorage
+from django.test import TestCase, override_settings
+from pymongo.errors import PyMongoError
 from rest_framework.test import APIClient
 
 from .authentication import MongoUser
 from .permissions import can_access_ticket
+from .serializers import AttachmentMetadataSerializer
 
 
 class ApiTests(TestCase):
@@ -129,3 +135,271 @@ class ApiTests(TestCase):
         self.assertEqual(database.tickets.find_one_and_update.call_args.args[0]["version"], 1)
         database.ticket_audit.insert_one.assert_called_once()
         database.notifications.insert_one.assert_called_once()
+
+    def attachment_ticket(self):
+        return {
+            "_id": ObjectId(),
+            "number": "NX-2026-000009",
+            "owner_id": self.employee_id,
+        }
+
+    @patch("core.views.private_attachment_storage")
+    @patch("core.views.get_database")
+    def test_attachment_upload_stores_file_and_metadata_without_exposing_storage_key(
+        self, get_database, private_storage,
+    ):
+        ticket = self.attachment_ticket()
+        database = MagicMock()
+        database.tickets.find_one.return_value = ticket
+        database.attachments.insert_one.return_value.inserted_id = ObjectId()
+        get_database.return_value = database
+        storage = MagicMock()
+        storage.save.side_effect = lambda name, content: name
+        private_storage.return_value = storage
+        self.client.force_authenticate(user=self.employee)
+
+        response = self.client.post(
+            f"/api/v1/tickets/{ticket['_id']}/attachments/",
+            {"file": SimpleUploadedFile(
+                "report.pdf", b"%PDF-1.7\nattachment test", content_type="application/pdf",
+            )},
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, 201)
+        document = database.attachments.insert_one.call_args.args[0]
+        self.assertEqual(document["filename"], "report.pdf")
+        self.assertEqual(document["content_type"], "application/pdf")
+        self.assertEqual(document["size"], len(b"%PDF-1.7\nattachment test"))
+        self.assertRegex(document["storage_key"], rf"^{ticket['_id']}/[0-9a-f]{{32}}\.pdf$")
+        self.assertNotIn("storage_key", response.json()["data"])
+        storage.save.assert_called_once()
+
+    @patch("core.views.private_attachment_storage")
+    @patch("core.views.get_database")
+    def test_attachment_download_streams_file_for_ticket_owner(self, get_database, private_storage):
+        ticket = self.attachment_ticket()
+        attachment_id = ObjectId()
+        storage_key = f"{ticket['_id']}/{'a' * 32}.pdf"
+        database = MagicMock()
+        database.tickets.find_one.return_value = ticket
+        database.attachments.find_one.return_value = {
+            "_id": attachment_id,
+            "ticket_id": ticket["_id"],
+            "filename": "report.pdf",
+            "content_type": "application/pdf",
+            "size": 8,
+            "storage_key": storage_key,
+        }
+        get_database.return_value = database
+        storage = MagicMock()
+        storage.open.return_value = BytesIO(b"%PDF-test")
+        private_storage.return_value = storage
+        self.client.force_authenticate(user=self.employee)
+
+        response = self.client.get(
+            f"/api/v1/tickets/{ticket['_id']}/attachments/{attachment_id}/download/",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(b"".join(response.streaming_content), b"%PDF-test")
+        self.assertIn("attachment", response["Content-Disposition"])
+        self.assertEqual(response["Cache-Control"], "private, no-store")
+        storage.open.assert_called_once_with(storage_key, "rb")
+
+    @patch("core.views.private_attachment_storage")
+    @patch("core.views.get_database")
+    def test_local_private_storage_round_trips_attachment(self, get_database, private_storage):
+        ticket = self.attachment_ticket()
+        attachment_id = ObjectId()
+        database = MagicMock()
+        database.tickets.find_one.return_value = ticket
+        database.attachments.insert_one.return_value.inserted_id = attachment_id
+        get_database.return_value = database
+        content = b"%PDF-1.7\nprivate attachment"
+        self.client.force_authenticate(user=self.employee)
+
+        with TemporaryDirectory() as upload_root:
+            storage = FileSystemStorage(location=upload_root)
+            private_storage.return_value = storage
+            upload_response = self.client.post(
+                f"/api/v1/tickets/{ticket['_id']}/attachments/",
+                {"file": SimpleUploadedFile(
+                    "report.pdf", content, content_type="application/pdf",
+                )},
+                format="multipart",
+            )
+            self.assertEqual(upload_response.status_code, 201)
+            attachment = database.attachments.insert_one.call_args.args[0]
+            attachment["_id"] = attachment_id
+            database.attachments.find_one.return_value = attachment
+
+            download_response = self.client.get(
+                f"/api/v1/tickets/{ticket['_id']}/attachments/{attachment_id}/download/",
+            )
+
+            self.assertEqual(download_response.status_code, 200)
+            self.assertTrue(storage.exists(attachment["storage_key"]))
+            self.assertEqual(b"".join(download_response.streaming_content), content)
+
+    @patch("core.views.private_attachment_storage")
+    @patch("core.views.get_database")
+    def test_attachment_download_hides_other_users_ticket(self, get_database, private_storage):
+        ticket = self.attachment_ticket()
+        ticket["owner_id"] = ObjectId()
+        database = MagicMock()
+        database.tickets.find_one.return_value = ticket
+        get_database.return_value = database
+        self.client.force_authenticate(user=self.employee)
+
+        response = self.client.get(
+            f"/api/v1/tickets/{ticket['_id']}/attachments/{ObjectId()}/download/",
+        )
+
+        self.assertEqual(response.status_code, 404)
+        database.attachments.find_one.assert_not_called()
+        private_storage.assert_not_called()
+
+    @patch("core.views.private_attachment_storage")
+    @patch("core.views.get_database")
+    def test_attachment_download_reports_missing_file(self, get_database, private_storage):
+        ticket = self.attachment_ticket()
+        attachment_id = ObjectId()
+        database = MagicMock()
+        database.tickets.find_one.return_value = ticket
+        database.attachments.find_one.return_value = {
+            "_id": attachment_id,
+            "ticket_id": ticket["_id"],
+            "filename": "report.pdf",
+            "content_type": "application/pdf",
+            "size": 8,
+            "storage_key": f"{ticket['_id']}/{'a' * 32}.pdf",
+        }
+        get_database.return_value = database
+        storage = MagicMock()
+        storage.open.side_effect = FileNotFoundError
+        private_storage.return_value = storage
+        self.client.force_authenticate(user=self.employee)
+
+        response = self.client.get(
+            f"/api/v1/tickets/{ticket['_id']}/attachments/{attachment_id}/download/",
+        )
+
+        self.assertEqual(response.status_code, 404)
+
+    @patch("core.views.private_attachment_storage")
+    @patch("core.views.get_database")
+    def test_invalid_attachment_content_is_rejected(self, get_database, private_storage):
+        ticket = self.attachment_ticket()
+        database = MagicMock()
+        database.tickets.find_one.return_value = ticket
+        get_database.return_value = database
+        storage = MagicMock()
+        private_storage.return_value = storage
+        self.client.force_authenticate(user=self.employee)
+
+        response = self.client.post(
+            f"/api/v1/tickets/{ticket['_id']}/attachments/",
+            {"file": SimpleUploadedFile(
+                "fake.pdf", b"not a PDF", content_type="application/pdf",
+            )},
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        storage.save.assert_not_called()
+        database.attachments.insert_one.assert_not_called()
+
+    @override_settings(MAX_ATTACHMENT_BYTES=4)
+    @patch("core.views.private_attachment_storage")
+    @patch("core.views.get_database")
+    def test_attachment_size_limit_is_enforced_before_storage(self, get_database, private_storage):
+        ticket = self.attachment_ticket()
+        database = MagicMock()
+        database.tickets.find_one.return_value = ticket
+        get_database.return_value = database
+        storage = MagicMock()
+        private_storage.return_value = storage
+        self.client.force_authenticate(user=self.employee)
+
+        response = self.client.post(
+            f"/api/v1/tickets/{ticket['_id']}/attachments/",
+            {"file": SimpleUploadedFile(
+                "report.pdf", b"%PDF-", content_type="application/pdf",
+            )},
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        storage.save.assert_not_called()
+
+    @patch("core.views.private_attachment_storage")
+    @patch("core.views.get_database")
+    def test_attachment_storage_failure_returns_service_error(self, get_database, private_storage):
+        ticket = self.attachment_ticket()
+        database = MagicMock()
+        database.tickets.find_one.return_value = ticket
+        get_database.return_value = database
+        storage = MagicMock()
+        storage.save.side_effect = OSError("disk unavailable")
+        private_storage.return_value = storage
+        self.client.force_authenticate(user=self.employee)
+
+        response = self.client.post(
+            f"/api/v1/tickets/{ticket['_id']}/attachments/",
+            {"file": SimpleUploadedFile(
+                "report.pdf", b"%PDF-1.7\nattachment test", content_type="application/pdf",
+            )},
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, 503)
+        database.attachments.insert_one.assert_not_called()
+
+    @patch("core.views.private_attachment_storage")
+    @patch("core.views.get_database")
+    def test_database_failure_removes_saved_attachment(self, get_database, private_storage):
+        ticket = self.attachment_ticket()
+        database = MagicMock()
+        database.tickets.find_one.return_value = ticket
+        database.attachments.insert_one.side_effect = PyMongoError("database unavailable")
+        get_database.return_value = database
+        storage = MagicMock()
+        storage.save.side_effect = lambda name, content: name
+        private_storage.return_value = storage
+        self.client.force_authenticate(user=self.employee)
+
+        response = self.client.post(
+            f"/api/v1/tickets/{ticket['_id']}/attachments/",
+            {"file": SimpleUploadedFile(
+                "report.pdf", b"%PDF-1.7\nattachment test", content_type="application/pdf",
+            )},
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, 503)
+        saved_key = storage.save.call_args.args[0]
+        storage.delete.assert_called_once_with(saved_key)
+        database.attachments.delete_one.assert_called_once_with({"storage_key": saved_key})
+
+    def test_attachment_serializer_does_not_accept_storage_keys_from_clients(self):
+        serializer = AttachmentMetadataSerializer(data={
+            "filename": "report.pdf",
+            "content_type": "application/pdf",
+            "size": 8,
+            "storage_key": "../../private/report.pdf",
+        })
+
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+        self.assertNotIn("storage_key", serializer.validated_data)
+
+    def test_attachment_serializer_rejects_path_filenames(self):
+        for filename in ("../report.pdf", "folder\\report.pdf", "report\n.pdf"):
+            with self.subTest(filename=filename):
+                serializer = AttachmentMetadataSerializer(data={
+                    "filename": filename,
+                    "content_type": "application/pdf",
+                    "size": 8,
+                })
+
+                self.assertFalse(serializer.is_valid())

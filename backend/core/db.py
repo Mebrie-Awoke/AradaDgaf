@@ -51,7 +51,7 @@ def _ensure_schema(database):
         "notifications": {"$jsonSchema": {"bsonType": "object", "required": ["user_id", "kind", "message", "created_at", "read"]}},
         "departments": {"$jsonSchema": {"bsonType": "object", "required": ["name", "created_at"]}},
         "categories": {"$jsonSchema": {"bsonType": "object", "required": ["name", "created_at"]}},
-        "attachments": {"$jsonSchema": {"bsonType": "object", "required": ["ticket_id", "uploaded_by", "filename", "content_type", "size", "created_at"]}},
+        "attachments": {"$jsonSchema": {"bsonType": "object", "required": ["ticket_id", "uploaded_by", "filename", "content_type", "size", "storage_key", "created_at"], "properties": {"filename": {"bsonType": "string"}, "content_type": {"enum": ["application/pdf", "image/jpeg", "image/png", "text/plain", "application/zip", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"]}, "size": {"bsonType": ["int", "long"], "minimum": 1}, "storage_key": {"bsonType": "string"}}}},
         "access_tokens": {"$jsonSchema": {"bsonType": "object", "required": ["token_hash", "user_id", "expires_at", "created_at"]}},
     }
     for collection, validator in validators.items():
@@ -68,7 +68,7 @@ def _ensure_schema(database):
         "notifications": [([("user_id", ASCENDING), ("created_at", DESCENDING)], {})],
         "departments": [([("name", ASCENDING)], {"unique": True})],
         "categories": [([("name", ASCENDING)], {"unique": True})],
-        "attachments": [([("ticket_id", ASCENDING), ("created_at", DESCENDING)], {})],
+        "attachments": [([("ticket_id", ASCENDING), ("created_at", DESCENDING)], {}), ([("storage_key", ASCENDING)], {"unique": True})],
         "access_tokens": [([("token_hash", ASCENDING)], {"unique": True}), ([ ("expires_at", ASCENDING)], {"expireAfterSeconds": 0})],
     }
     for collection, definitions in indexes.items():

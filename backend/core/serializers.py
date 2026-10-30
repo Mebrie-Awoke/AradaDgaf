@@ -70,14 +70,14 @@ class AttachmentMetadataSerializer(serializers.Serializer):
         "application/zip", "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     ])
     size = serializers.IntegerField(min_value=1, max_value=settings.MAX_ATTACHMENT_BYTES)
-    storage_key = serializers.CharField(max_length=512, trim_whitespace=True)
 
     def validate_filename(self, value):
-        if os.path.basename(value) != value or "/" in value or "\\" in value or value in {".", ".."}:
+        if (
+            os.path.basename(value) != value
+            or "/" in value
+            or "\\" in value
+            or value in {".", ".."}
+            or any(ord(character) < 32 or ord(character) == 127 for character in value)
+        ):
             raise serializers.ValidationError("Filename must not contain a path.")
-        return value
-
-    def validate_storage_key(self, value):
-        if value.startswith(("/", "\\")) or ".." in value.split("/") or "\\" in value:
-            raise serializers.ValidationError("Storage key must be a relative opaque key.")
         return value

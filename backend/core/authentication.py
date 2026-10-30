@@ -13,6 +13,7 @@ class MongoUser:
 
     def __init__(self, document):
         self.id = str(document["_id"])
+        self.pk = self.id
         self.email = document["email"]
         self.name = document.get("name", "")
         self.role = document["role"]
