@@ -63,6 +63,7 @@ Public registration always creates an employee. Only an authenticated administra
 | GET, POST | `/api/v1/tickets/{id}/comments/` | Owner, support, admin | List or add comments |
 | GET | `/api/v1/tickets/{id}/audit/` | Owner, support, admin | Read immutable audit events |
 | GET, POST | `/api/v1/tickets/{id}/attachments/` | Owner, support, admin | List/upload a validated attachment |
+| GET | `/api/v1/tickets/{id}/attachments/{attachment_id}/download/` | Owner, support, admin | Download an attachment from an accessible ticket |
 | GET | `/api/v1/notifications/` | Authenticated | List own notifications (`?unread=true`) |
 | PATCH | `/api/v1/notifications/{id}/` | Notification owner | Mark as read |
 
@@ -96,7 +97,9 @@ Content-Type: application/json
 {"title":"VPN connection fails","description":"The office VPN disconnects after sign-in.","priority":"high"}
 ```
 
-Support staff update a ticket with `PATCH /api/v1/tickets/{id}/` and for example `{"assigned_to":"<support-user-object-id>","status":"in_progress"}`. Uploads use multipart form field `file`; allowed types are PDF, JPEG, PNG, plain text, ZIP, and DOCX, limited by `MAX_ATTACHMENT_BYTES`. Files are stored under `PRIVATE_UPLOAD_ROOT`, outside public static/media serving. The API does not expose a download route; production deployments should connect private object storage and an authorized download flow before enabling downloads.
+Support staff update a ticket with `PATCH /api/v1/tickets/{id}/` and for example `{"assigned_to":"<support-user-object-id>","status":"in_progress"}`. Uploads use multipart form field `file`; allowed types are PDF, JPEG, PNG, UTF-8 plain text, ZIP, and DOCX, limited by `MAX_ATTACHMENT_BYTES`. The API validates filenames, extensions, declared MIME types, and file content, then generates a random storage key. Clients never supply or receive storage keys. Attachment metadata is stored in MongoDB; file bytes use Django's private storage alias. The default backend is `django.core.files.storage.FileSystemStorage`, rooted at `PRIVATE_UPLOAD_ROOT`. Configure `PRIVATE_STORAGE_BACKEND` and `PRIVATE_STORAGE_OPTIONS` (a JSON object passed to the backend) to use another Django storage backend. For local storage, set `PRIVATE_UPLOAD_ROOT` to a private, durable volume that is not served as static or public media; container filesystems are otherwise ephemeral. The API does not expose the storage directory.
+
+Download an attachment with `GET /api/v1/tickets/{ticket_id}/attachments/{attachment_id}/download/` and an authenticated bearer token. The requester must have access to the associated ticket (the ticket owner, support, or admin). Downloads are streamed as attachments and are never served from a public URL.
 
 ### MongoDB data and security
 
@@ -107,8 +110,8 @@ Set `DJANGO_DEBUG=false` in production and provide `DJANGO_SECRET_KEY`, exact `D
 ### Deployment checklist
 
 1. Install `backend/requirements.txt` in a pinned/locked deployment environment and inject production variables from a secret manager.
-2. Set `DJANGO_DEBUG=false`, secret key, hosts, CORS origins, Atlas URI/database, upload root, and HTTPS settings.
-3. Ensure the deployment identity can reach Atlas and the private upload path; run the initial admin command once.
+2. Set `DJANGO_DEBUG=false`, secret key, hosts, CORS origins, Atlas URI/database, private storage backend/options, and HTTPS settings.
+3. Ensure the deployment identity can reach Atlas and the private storage backend; when using local storage, mount a durable private volume at `PRIVATE_UPLOAD_ROOT`. Run the initial admin command once.
 4. Run `python backend/manage.py check --deploy` and `python backend/manage.py test core` in CI. The deploy check may require appropriate HTTPS/HSTS settings.
 5. Run behind an HTTPS-terminating reverse proxy using a production WSGI server (for example, Gunicorn) and configure the proxy forwarded-protocol header consistently with `SECURE_PROXY_SSL_HEADER`.
 6. Monitor application/database errors, back up MongoDB and attachments, and plan index/validator changes as schema evolves.

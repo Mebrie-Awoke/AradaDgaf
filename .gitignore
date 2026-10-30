@@ -13,6 +13,7 @@ env/
 *.sqlite3
 staticfiles/
 backend/private_uploads/
+private_uploads/
 media/
 
 # Secrets and local config
