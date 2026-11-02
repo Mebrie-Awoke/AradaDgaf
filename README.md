@@ -1,6 +1,6 @@
 # Nexora IT Support Ticketing System
 
-## Backend
+## Backend   
 
 The Django REST Framework API uses PyMongo for application data in MongoDB Atlas. Django's SQLite database is only used by Django's built-in admin/session framework; it does not store users, tickets, or other Nexora records. Mongo collections and indexes are initialized lazily when the first data request arrives. `/api/health/` does not require MongoDB and is suitable for a process liveness check.
 
