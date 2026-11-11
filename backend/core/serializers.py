@@ -9,7 +9,6 @@ class RegistrationSerializer(serializers.Serializer):
     email = serializers.EmailField(max_length=254)
     name = serializers.CharField(max_length=120, trim_whitespace=True)
     password = serializers.CharField(min_length=12, max_length=128, write_only=True, trim_whitespace=False)
-    department_id = serializers.CharField(max_length=24, required=False, allow_blank=True)
 
     def validate_email(self, value):
         return value.lower()
@@ -29,6 +28,7 @@ class LoginSerializer(serializers.Serializer):
 
 class ProvisionUserSerializer(RegistrationSerializer):
     role = serializers.ChoiceField(choices=["employee", "support", "admin"])
+    department_id = serializers.CharField(max_length=24, required=False, allow_blank=True)
 
 
 class TicketCreateSerializer(serializers.Serializer):
