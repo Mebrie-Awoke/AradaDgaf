@@ -15,6 +15,10 @@ def upgrade(database):
         {"resolution_note": {"$exists": False}},
         {"$set": {"resolution_note": ""}},
     )
+    tickets.update_many(
+        {"version": {"$exists": False}},
+        {"$set": {"version": 1}},
+    )
     database.ticket_comments.update_many(
         {"internal_only": {"$exists": False}},
         {"$set": {"internal_only": False}},
@@ -27,5 +31,14 @@ def upgrade(database):
             "status": {"enum": ["submitted", "assigned", "in_progress", "resolved", "closed"]},
             "priority": {"enum": ["low", "medium", "high", "critical"]},
             "resolution_note": {"bsonType": "string"},
+        },
+    }}, "validationLevel": "strict"})
+    database.command({"collMod": "attachments", "validator": {"$jsonSchema": {
+        "bsonType": "object",
+        "required": ["ticket_id", "uploaded_by", "filename", "content_type", "size", "storage_key", "created_at"],
+        "properties": {
+            "content_type": {"enum": ["image/jpeg", "image/png"]},
+            "size": {"bsonType": ["int", "long"], "minimum": 1},
+            "storage_key": {"bsonType": "string"},
         },
     }}, "validationLevel": "strict"})
