@@ -161,7 +161,7 @@ class ApiTests(TestCase):
         response = self.client.post(
             f"/api/v1/tickets/{ticket['_id']}/attachments/",
             {"file": SimpleUploadedFile(
-                "report.pdf", b"%PDF-1.7\nattachment test", content_type="application/pdf",
+                "report.pdf", b"\xff\xd8\xffattachment test\xff\xd9", content_type="application/pdf",
             )},
             format="multipart",
         )
@@ -170,7 +170,7 @@ class ApiTests(TestCase):
         document = database.attachments.insert_one.call_args.args[0]
         self.assertEqual(document["filename"], "report.pdf")
         self.assertEqual(document["content_type"], "application/pdf")
-        self.assertEqual(document["size"], len(b"%PDF-1.7\nattachment test"))
+        self.assertEqual(document["size"], len(b"\xff\xd8\xffattachment test\xff\xd9"))
         self.assertRegex(document["storage_key"], rf"^{ticket['_id']}/[0-9a-f]{{32}}\.pdf$")
         self.assertNotIn("storage_key", response.json()["data"])
         storage.save.assert_called_once()
@@ -193,7 +193,7 @@ class ApiTests(TestCase):
         }
         get_database.return_value = database
         storage = MagicMock()
-        storage.open.return_value = BytesIO(b"%PDF-test")
+        storage.open.return_value = BytesIO(b"\xff\xd8\xfftest\xff\xd9")
         private_storage.return_value = storage
         self.client.force_authenticate(user=self.employee)
 
@@ -202,7 +202,7 @@ class ApiTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(b"".join(response.streaming_content), b"%PDF-test")
+        self.assertEqual(b"".join(response.streaming_content), b"\xff\xd8\xfftest\xff\xd9")
         self.assertIn("attachment", response["Content-Disposition"])
         self.assertEqual(response["Cache-Control"], "private, no-store")
         storage.open.assert_called_once_with(storage_key, "rb")
@@ -216,7 +216,7 @@ class ApiTests(TestCase):
         database.tickets.find_one.return_value = ticket
         database.attachments.insert_one.return_value.inserted_id = attachment_id
         get_database.return_value = database
-        content = b"%PDF-1.7\nprivate attachment"
+        content = b"\xff\xd8\xffprivate attachment\xff\xd9"
         self.client.force_authenticate(user=self.employee)
 
         with TemporaryDirectory() as upload_root:
@@ -301,7 +301,7 @@ class ApiTests(TestCase):
         response = self.client.post(
             f"/api/v1/tickets/{ticket['_id']}/attachments/",
             {"file": SimpleUploadedFile(
-                "fake.pdf", b"not a PDF", content_type="application/pdf",
+                "fake.pdf", b"not a JPEG", content_type="application/pdf",
             )},
             format="multipart",
         )
@@ -325,7 +325,7 @@ class ApiTests(TestCase):
         response = self.client.post(
             f"/api/v1/tickets/{ticket['_id']}/attachments/",
             {"file": SimpleUploadedFile(
-                "report.pdf", b"%PDF-", content_type="application/pdf",
+                "report.pdf", b"\xff\xd8\xff", content_type="application/pdf",
             )},
             format="multipart",
         )
@@ -348,7 +348,7 @@ class ApiTests(TestCase):
         response = self.client.post(
             f"/api/v1/tickets/{ticket['_id']}/attachments/",
             {"file": SimpleUploadedFile(
-                "report.pdf", b"%PDF-1.7\nattachment test", content_type="application/pdf",
+                "report.pdf", b"\xff\xd8\xffattachment test\xff\xd9", content_type="application/pdf",
             )},
             format="multipart",
         )
@@ -372,7 +372,7 @@ class ApiTests(TestCase):
         response = self.client.post(
             f"/api/v1/tickets/{ticket['_id']}/attachments/",
             {"file": SimpleUploadedFile(
-                "report.pdf", b"%PDF-1.7\nattachment test", content_type="application/pdf",
+                "report.pdf", b"\xff\xd8\xffattachment test\xff\xd9", content_type="application/pdf",
             )},
             format="multipart",
         )
