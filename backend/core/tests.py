@@ -91,19 +91,19 @@ class ApiTests(TestCase):
         self.assertEqual(response.status_code, 201)
         stored = database.tickets.insert_one.call_args.args[0]
         self.assertEqual(stored["owner_id"], self.employee_id)
-        self.assertEqual(stored["status"], "open")
-        self.assertEqual(stored["number"], f"NX-{datetime.now(timezone.utc).year}-000007")
+        self.assertEqual(stored["status"], "submitted")
+        self.assertEqual(stored["number"], f"AF-{datetime.now(timezone.utc).year}-00007")
         database.ticket_audit.insert_one.assert_called_once()
 
     @patch("core.views.get_database")
     def test_employee_cannot_change_priority_or_access_other_users_ticket(self, get_database):
         database = MagicMock()
         ticket_id = ObjectId()
-        ticket = {"_id": ticket_id, "owner_id": self.employee_id, "status": "open", "version": 1}
+        ticket = {"_id": ticket_id, "owner_id": self.employee_id, "status": "submitted", "version": 1}
         database.tickets.find_one.return_value = ticket
         get_database.return_value = database
         self.client.force_authenticate(user=self.employee)
-        response = self.client.patch(f"/api/v1/tickets/{ticket_id}/", {"priority": "urgent"}, format="json")
+        response = self.client.patch(f"/api/v1/tickets/{ticket_id}/", {"priority": "critical"}, format="json")
         self.assertEqual(response.status_code, 403)
         ticket["owner_id"] = ObjectId()
         response = self.client.get(f"/api/v1/tickets/{ticket_id}/")
@@ -121,15 +121,15 @@ class ApiTests(TestCase):
         database = MagicMock()
         ticket_id = ObjectId()
         ticket = {
-            "_id": ticket_id, "number": "NX-2026-000001", "owner_id": self.employee_id,
-            "status": "in_progress", "priority": "normal", "version": 1,
+            "_id": ticket_id, "number": "AF-2026-000001", "owner_id": self.employee_id,
+            "status": "in_progress", "priority": "medium", "version": 1,
         }
         database.tickets.find_one.return_value = ticket
-        database.tickets.find_one_and_update.return_value = {**ticket, "status": "resolved", "version": 2}
+        database.tickets.find_one_and_update.return_value = {**ticket, "status": "resolved", "resolution_note": "Reconfigured the network adapter.", "version": 2}
         get_database.return_value = database
         support = MongoUser({**self.employee_doc, "_id": ObjectId(), "role": "support"})
         self.client.force_authenticate(user=support)
-        response = self.client.patch(f"/api/v1/tickets/{ticket_id}/", {"status": "resolved"}, format="json")
+        response = self.client.patch(f"/api/v1/tickets/{ticket_id}/", {"status": "resolved", "resolution_note": "Reconfigured the network adapter."}, format="json")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["data"]["status"], "resolved")
         self.assertEqual(database.tickets.find_one_and_update.call_args.args[0]["version"], 1)
@@ -139,7 +139,7 @@ class ApiTests(TestCase):
     def attachment_ticket(self):
         return {
             "_id": ObjectId(),
-            "number": "NX-2026-000009",
+            "number": "AF-2026-000009",
             "owner_id": self.employee_id,
         }
 
