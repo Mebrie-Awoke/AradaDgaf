@@ -1,4 +1,5 @@
 from pymongo import ASCENDING, DESCENDING
+from pymongo.errors import CollectionInvalid
 
 version = 1
 description = "Create core AradaDgaf collections, validators, and indexes."
@@ -19,7 +20,10 @@ def upgrade(database):
     }
     for name, validator in validators.items():
         if name not in database.list_collection_names():
-            database.create_collection(name, validator=validator)
+            try:
+                database.create_collection(name, validator=validator)
+            except CollectionInvalid:
+                pass
         else:
             database.command({"collMod": name, "validator": validator, "validationLevel": "moderate"})
     indexes = {
