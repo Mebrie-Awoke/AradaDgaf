@@ -1,5 +1,7 @@
 from importlib import import_module
 
+from pymongo.errors import CollectionInvalid, DuplicateKeyError
+
 MIGRATIONS = (
     "core.mongo_migrations.0001_initial",
     "core.mongo_migrations.0002_ticket_workflow",
@@ -9,7 +11,10 @@ MIGRATIONS = (
 
 def apply_migrations(database):
     if "schema_migrations" not in database.list_collection_names():
-        database.create_collection("schema_migrations")
+        try:
+            database.create_collection("schema_migrations")
+        except CollectionInvalid:
+            pass
         database.schema_migrations.create_index("version", unique=True)
     applied = {
         item["version"]
@@ -19,7 +24,11 @@ def apply_migrations(database):
         migration = import_module(module_path)
         if migration.version not in applied:
             migration.upgrade(database)
-            database.schema_migrations.insert_one({
-                "version": migration.version,
-                "description": migration.description,
-            })
+            try:
+                database.schema_migrations.insert_one({
+                    "version": migration.version,
+                    "description": migration.description,
+                })
+            except DuplicateKeyError:
+                # Another worker completed this same idempotent migration.
+                pass
