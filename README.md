@@ -7,7 +7,7 @@ The Django REST Framework API uses PyMongo for application data in MongoDB Atlas
 ### Requirements and local setup
 
 - Python 3.11 or newer
-- MongoDB Atlas cluster with a database user restricted to the `aradadgaf_db` database
+- MongoDB Atlas cluster with a database user restricted to the `AradaDgaf` database
 - Network access from the deployment host to Atlas
 
 From the repository root in PowerShell:
