@@ -1,7 +1,7 @@
 
 from django.urls import path
 from .views import (
-    HealthCheckView, LoginView, LogoutView, NamedResourcesView,
+    DashboardView, HealthCheckView, LoginView, LogoutView, NamedResourcesView,
     NotificationDetailView, NotificationsView, RegistrationView,
     TicketAttachmentDownloadView, TicketAttachmentsView, TicketAuditView, TicketCommentsView,
     TicketDetailView, TicketListCreateView, UsersView,
@@ -13,6 +13,7 @@ urlpatterns = [
     path("v1/auth/login/", LoginView.as_view(), name="login"),
     path("v1/auth/logout/", LogoutView.as_view(), name="logout"),
     path("v1/users/", UsersView.as_view(), name="users"),
+    path("v1/dashboard/", DashboardView.as_view(), name="dashboard"),
     path("v1/departments/", NamedResourcesView.as_view(), {"resource": "departments"}, name="departments"),
     path("v1/categories/", NamedResourcesView.as_view(), {"resource": "categories"}, name="categories"),
     path("v1/tickets/", TicketListCreateView.as_view(), name="tickets"),
