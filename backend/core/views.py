@@ -27,7 +27,8 @@ from .permissions import IsAdmin, can_access_ticket
 from .serializers import (
     AttachmentMetadataSerializer, CommentSerializer, LoginSerializer,
     NamedResourceSerializer, ProvisionUserSerializer, RegistrationSerializer,
-    TicketCreateSerializer, TicketUpdateSerializer,
+    TicketCreateSerializer, TicketUpdateSerializer, UserUpdateSerializer,
+    NamedResourceUpdateSerializer,
 )
 from .utils import json_safe, public_user
 
@@ -216,7 +217,56 @@ class UsersView(APIView):
         }
         inserted = database.users.insert_one(user)
         user["_id"] = inserted.inserted_id
+        database.admin_audit.insert_one({
+            "actor_id": ObjectId(request.user.id), "actor_email": request.user.email,
+            "action": "user_created", "target_user_id": inserted.inserted_id,
+            "changes": {"role": values["role"], "email": values["email"]}, "created_at": now(),
+        })
         return success({"user": public_user(user)}, status.HTTP_201_CREATED)
+
+
+class UserDetailView(APIView):
+    permission_classes = [IsAdmin]
+
+    def patch(self, request, user_id):
+        database = get_database()
+        target_id = parse_object_id(user_id, "user_id")
+        target = database.users.find_one({"_id": target_id})
+        if not target:
+            raise NotFound("User not found.")
+        serializer = UserUpdateSerializer(data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        updates = serializer.validated_data.copy()
+        if "department_id" in updates:
+            updates["department_id"] = require_reference(
+                database, "departments", updates["department_id"], "department_id"
+            )
+        if target_id == ObjectId(request.user.id) and updates.get("is_active") is False:
+            raise ValidationError({"is_active": "You cannot deactivate your own account."})
+        loses_admin = target.get("role") == "admin" and (
+            updates.get("role", "admin") != "admin" or updates.get("is_active") is False
+        )
+        if loses_admin and database.users.count_documents({
+            "role": "admin", "is_active": {"$ne": False},
+        }) <= 1:
+            raise ValidationError({"role": "At least one active administrator must remain."})
+        changes = {
+            key: {"from": str(target.get(key)) if key == "department_id" and target.get(key) else target.get(key),
+                  "to": str(value) if key == "department_id" and value else value}
+            for key, value in updates.items() if target.get(key) != value
+        }
+        if not changes:
+            return success({"user": public_user(target)})
+        updates["updated_at"] = now()
+        updated = database.users.find_one_and_update(
+            {"_id": target_id}, {"$set": updates}, return_document=ReturnDocument.AFTER,
+        )
+        database.admin_audit.insert_one({
+            "actor_id": ObjectId(request.user.id), "actor_email": request.user.email,
+            "action": "user_updated", "target_user_id": target_id,
+            "changes": changes, "created_at": now(),
+        })
+        return success({"user": public_user(updated)})
 
 
 class TicketListCreateView(APIView):
@@ -408,7 +458,50 @@ class NamedResourcesView(APIView):
         document = {**serializer.validated_data, "created_at": now(), "is_active": True}
         inserted = get_database()[resource].insert_one(document)
         document["_id"] = inserted.inserted_id
+        database = get_database()
+        database.admin_audit.insert_one({
+            "actor_id": ObjectId(request.user.id), "actor_email": request.user.email,
+            "action": f"{resource[:-1]}_created", "target_id": inserted.inserted_id,
+            "changes": {"name": document["name"]}, "created_at": now(),
+        })
         return success(document, status.HTTP_201_CREATED)
+
+
+class NamedResourceDetailView(APIView):
+    def patch(self, request, resource, resource_id):
+        if request.user.role != "admin":
+            raise PermissionDenied("Administrator access is required.")
+        database = get_database()
+        target_id = parse_object_id(resource_id, f"{resource[:-1]}_id")
+        target = database[resource].find_one({"_id": target_id})
+        if not target:
+            raise NotFound("Record not found.")
+        serializer = NamedResourceUpdateSerializer(data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        updates = serializer.validated_data
+        changes = {key: {"from": target.get(key), "to": value}
+                   for key, value in updates.items() if target.get(key) != value}
+        if not changes:
+            return success(target)
+        updates = {**updates, "updated_at": now()}
+        updated = database[resource].find_one_and_update(
+            {"_id": target_id}, {"$set": updates}, return_document=ReturnDocument.AFTER,
+        )
+        database.admin_audit.insert_one({
+            "actor_id": ObjectId(request.user.id), "actor_email": request.user.email,
+            "action": f"{resource[:-1]}_updated", "target_id": target_id,
+            "changes": changes, "created_at": now(),
+        })
+        return success(updated)
+
+
+class AdminAuditView(APIView):
+    permission_classes = [IsAdmin]
+
+    def get(self, request):
+        return paginate_mongo(
+            get_database().admin_audit, request, sort=[("created_at", DESCENDING)],
+        )
 
 
 class TicketAttachmentsView(APIView):
