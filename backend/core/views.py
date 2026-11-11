@@ -60,7 +60,7 @@ def require_reference(database, collection, value, field):
     if not value:
         return None
     reference_id = parse_object_id(value, field)
-    if not database[collection].find_one({"_id": reference_id}):
+    if not database[collection].find_one({"_id": reference_id, "is_active": {"$ne": False}}):
         raise ValidationError({field: "The selected record does not exist."})
     return reference_id
 
@@ -456,7 +456,8 @@ class TicketAuditView(APIView):
 
 class NamedResourcesView(APIView):
     def get(self, request, resource):
-        return paginate_mongo(get_database()[resource], request, {"is_active": {"$ne": False}}, [("name", 1)])
+        query = {} if request.user.role == "admin" else {"is_active": {"$ne": False}}
+        return paginate_mongo(get_database()[resource], request, query, [("name", 1)])
 
     def post(self, request, resource):
         if request.user.role != "admin":
@@ -480,7 +481,8 @@ class NamedResourceDetailView(APIView):
         if request.user.role != "admin":
             raise PermissionDenied("Administrator access is required.")
         database = get_database()
-        target_id = parse_object_id(resource_id, f"{resource[:-1]}_id")
+        resource_field = "department_id" if resource == "departments" else "category_id"
+        target_id = parse_object_id(resource_id, resource_field)
         target = database[resource].find_one({"_id": target_id})
         if not target:
             raise NotFound("Record not found.")
