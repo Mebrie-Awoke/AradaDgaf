@@ -10,7 +10,7 @@ from core.db import get_database
 
 
 class Command(BaseCommand):
-    help = "Create the initial Nexora administrator in MongoDB."
+    help = "Create the initial AradaDgaf administrator in MongoDB."
 
     def add_arguments(self, parser):
         parser.add_argument("email")
