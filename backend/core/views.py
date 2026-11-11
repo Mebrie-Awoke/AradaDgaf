@@ -251,7 +251,7 @@ class TicketListCreateView(APIView):
             query["owner_id"] = ObjectId(request.user.id)
         for field in ("status", "priority"):
             value = request.query_params.get(field)
-            allowed = {"open", "in_progress", "resolved", "closed"} if field == "status" else {"low", "normal", "high", "urgent"}
+            allowed = {"submitted", "assigned", "in_progress", "resolved", "closed"} if field == "status" else {"low", "medium", "high", "critical"}
             if value:
                 if value not in allowed:
                     raise ValidationError({field: "Invalid filter value."})
@@ -288,7 +288,7 @@ class TicketListCreateView(APIView):
         ticket = {
             "number": f"NX-{created.year}-{sequence['sequence']:06d}",
             "title": values["title"], "description": values["description"],
-            "status": "open", "priority": values["priority"],
+            "status": "submitted", "priority": values["priority"],
             "owner_id": ObjectId(request.user.id), "owner_name": request.user.name or request.user.email,
             "assigned_to": None, "category_id": category_id, "department_id": department_id,
             "created_at": created, "updated_at": created, "resolved_at": None,
@@ -296,7 +296,7 @@ class TicketListCreateView(APIView):
         }
         inserted = database.tickets.insert_one(ticket)
         ticket["_id"] = inserted.inserted_id
-        insert_audit(database, ticket, request.user, "ticket_created", {"status": "open"})
+        insert_audit(database, ticket, request.user, "ticket_created", {"status": "submitted"})
         return success(ticket, status.HTTP_201_CREATED)
 
 
@@ -337,8 +337,9 @@ class TicketDetailView(APIView):
                     updates[field] = require_reference(database, collection, updates[field], field)
             if "status" in updates:
                 transitions = {
-                    "open": {"in_progress", "resolved", "closed"},
-                    "in_progress": {"open", "resolved", "closed"},
+                    "submitted": {"assigned", "in_progress", "resolved"},
+                    "assigned": {"in_progress", "resolved"},
+                    "in_progress": {"assigned", "resolved"},
                     "resolved": {"in_progress", "closed"},
                     "closed": set(),
                 }
@@ -347,6 +348,12 @@ class TicketDetailView(APIView):
         elif request.user.role == "employee" and ticket["status"] != "resolved":
             raise PermissionDenied("Only resolved tickets can be closed by employees.")
 
+        if updates.get("status") == "resolved":
+            note = updates.get("resolution_note", ticket.get("resolution_note", ""))
+            if not note or not note.strip():
+                raise ValidationError({"resolution_note": "A resolution note is required before resolving a ticket."})
+        if updates.get("assigned_to") and ticket.get("status") == "submitted" and "status" not in updates:
+            updates["status"] = "assigned"
         changed = {key: {"from": ticket.get(key), "to": value} for key, value in updates.items() if ticket.get(key) != value}
         if not changed:
             return success(ticket)
@@ -377,7 +384,10 @@ class TicketCommentsView(APIView):
         database = get_database()
         ticket = get_ticket(database, ticket_id)
         check_ticket_access(request.user, ticket)
-        return paginate_mongo(database.ticket_comments, request, {"ticket_id": ticket["_id"]}, [("created_at", 1)])
+        query = {"ticket_id": ticket["_id"]}
+        if request.user.role == "employee":
+            query["internal_only"] = {"$ne": True}
+        return paginate_mongo(database.ticket_comments, request, query, [("created_at", 1)])
 
     def post(self, request, ticket_id):
         database = get_database()
@@ -385,10 +395,14 @@ class TicketCommentsView(APIView):
         check_ticket_access(request.user, ticket)
         serializer = CommentSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+        internal_only = serializer.validated_data["internal_only"]
+        if internal_only and request.user.role == "employee":
+            raise PermissionDenied("Only support staff and administrators can add internal comments.")
         comment = {
             "ticket_id": ticket["_id"], "author_id": ObjectId(request.user.id),
             "author_name": request.user.name or request.user.email,
-            "author_role": request.user.role, "body": serializer.validated_data["body"], "created_at": now(),
+            "author_role": request.user.role, "body": serializer.validated_data["body"],
+            "internal_only": internal_only, "created_at": now(),
         }
         inserted = database.ticket_comments.insert_one(comment)
         comment["_id"] = inserted.inserted_id
@@ -539,6 +553,30 @@ class TicketAttachmentDownloadView(APIView):
         )
         response["Cache-Control"] = "private, no-store"
         return response
+
+
+class DashboardView(APIView):
+    def get(self, request):
+        database = get_database()
+        match = {}
+        if request.user.role == "employee":
+            match["owner_id"] = ObjectId(request.user.id)
+        status_rows = list(database.tickets.aggregate([
+            {"$match": match},
+            {"$group": {"_id": "$status", "count": {"$sum": 1}}},
+        ]))
+        priority_rows = list(database.tickets.aggregate([
+            {"$match": match},
+            {"$group": {"_id": "$priority", "count": {"$sum": 1}}},
+        ]))
+        return success({
+            "total_tickets": database.tickets.count_documents(match),
+            "by_status": {row["_id"]: row["count"] for row in status_rows},
+            "by_priority": {row["_id"]: row["count"] for row in priority_rows},
+            "unread_notifications": database.notifications.count_documents({
+                "user_id": ObjectId(request.user.id), "read": False,
+            }),
+        })
 
 
 class NotificationsView(APIView):
