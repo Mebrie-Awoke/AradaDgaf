@@ -80,3 +80,26 @@ class AttachmentMetadataSerializer(serializers.Serializer):
         ):
             raise serializers.ValidationError("Filename must not contain a path.")
         return value
+
+
+class UserUpdateSerializer(serializers.Serializer):
+    name = serializers.CharField(max_length=120, trim_whitespace=True, required=False)
+    role = serializers.ChoiceField(choices=["employee", "support", "admin"], required=False)
+    department_id = serializers.CharField(max_length=24, required=False, allow_null=True, allow_blank=True)
+    is_active = serializers.BooleanField(required=False)
+
+    def validate(self, attrs):
+        if not attrs:
+            raise serializers.ValidationError("At least one field is required.")
+        return attrs
+
+
+class NamedResourceUpdateSerializer(serializers.Serializer):
+    name = serializers.CharField(max_length=100, trim_whitespace=True, required=False)
+    description = serializers.CharField(max_length=500, required=False, allow_blank=True)
+    is_active = serializers.BooleanField(required=False)
+
+    def validate(self, attrs):
+        if not attrs:
+            raise serializers.ValidationError("At least one field is required.")
+        return attrs
