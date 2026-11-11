@@ -2,12 +2,12 @@
 
 ## Backend    
 
-The Django REST Framework API uses PyMongo for application data in MongoDB Atlas. Django's SQLite database is only used by Django's built-in admin/session framework; it does not store users, tickets, or other Nexora records. Mongo collections and indexes are initialized lazily when the first data request arrives. `/api/health/` does not require MongoDB and is suitable for a process liveness check.
+The Django REST Framework API uses PyMongo for application data in MongoDB Atlas. Django's SQLite database is only used by Django's built-in admin/session framework; it does not store users, tickets, or other AradaDgaf records. Mongo collections and indexes are initialized lazily when the first data request arrives. `/api/health/` does not require MongoDB and is suitable for a process liveness check.
 
 ### Requirements and local setup
 
 - Python 3.11 or newer
-- MongoDB Atlas cluster with a database user restricted to the Nexora database
+- MongoDB Atlas cluster with a database user restricted to the `aradadgaf_db` database
 - Network access from the deployment host to Atlas
 
 From the repository root in PowerShell:
@@ -33,7 +33,7 @@ The API is available at `http://127.0.0.1:8000/api/`. Use `python backend\manage
 With a working MongoDB connection and `.env` configured, bootstrap the first admin interactively. The password is prompted (not passed on the command line) and stored using Django's password hashers:
 
 ```powershell
-python backend\manage.py create_initial_admin admin@example.com "Nexora Administrator"
+python backend\manage.py create_initial_admin admin@example.com "AradaDgaf Administrator"
 ```
 
 Public registration always creates an employee. Only an authenticated administrator can provision support/admin users through `POST /api/v1/users/`. Do not expose an initial-admin bootstrap endpoint publicly.
