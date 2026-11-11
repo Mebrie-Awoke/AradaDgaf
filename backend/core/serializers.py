@@ -34,7 +34,7 @@ class ProvisionUserSerializer(RegistrationSerializer):
 class TicketCreateSerializer(serializers.Serializer):
     title = serializers.CharField(max_length=200, trim_whitespace=True)
     description = serializers.CharField(max_length=10000, trim_whitespace=True)
-    priority = serializers.ChoiceField(choices=["low", "medium", "high", "critical"], default="normal")
+    priority = serializers.ChoiceField(choices=["low", "medium", "high", "critical"], default="medium")
     category_id = serializers.CharField(max_length=24, required=False, allow_blank=True)
     department_id = serializers.CharField(max_length=24, required=False, allow_blank=True)
 
@@ -42,7 +42,7 @@ class TicketCreateSerializer(serializers.Serializer):
 class TicketUpdateSerializer(serializers.Serializer):
     title = serializers.CharField(max_length=200, trim_whitespace=True, required=False)
     description = serializers.CharField(max_length=10000, trim_whitespace=True, required=False)
-    priority = serializers.ChoiceField(choices=["low", "normal", "high", "urgent"], required=False)
+    priority = serializers.ChoiceField(choices=["low", "medium", "high", "critical"], required=False)
     status = serializers.ChoiceField(choices=["submitted", "assigned", "in_progress", "resolved", "closed"], required=False)
     assigned_to = serializers.CharField(max_length=24, required=False, allow_null=True, allow_blank=True)
     resolution_note = serializers.CharField(max_length=5000, required=False, allow_blank=True, trim_whitespace=True)
