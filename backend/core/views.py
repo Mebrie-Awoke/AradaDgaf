@@ -461,7 +461,7 @@ class NamedResourcesView(APIView):
         database = get_database()
         database.admin_audit.insert_one({
             "actor_id": ObjectId(request.user.id), "actor_email": request.user.email,
-            "action": f"{resource[:-1]}_created", "target_id": inserted.inserted_id,
+            "action": f"{ {'departments': 'department', 'categories': 'category'}[resource] }_created", "target_id": inserted.inserted_id,
             "changes": {"name": document["name"]}, "created_at": now(),
         })
         return success(document, status.HTTP_201_CREATED)
@@ -489,7 +489,7 @@ class NamedResourceDetailView(APIView):
         )
         database.admin_audit.insert_one({
             "actor_id": ObjectId(request.user.id), "actor_email": request.user.email,
-            "action": f"{resource[:-1]}_updated", "target_id": target_id,
+            "action": f"{ {'departments': 'department', 'categories': 'category'}[resource] }_updated", "target_id": target_id,
             "changes": changes, "created_at": now(),
         })
         return success(updated)
