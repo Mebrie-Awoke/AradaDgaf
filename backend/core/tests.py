@@ -161,17 +161,17 @@ class ApiTests(TestCase):
         response = self.client.post(
             f"/api/v1/tickets/{ticket['_id']}/attachments/",
             {"file": SimpleUploadedFile(
-                "report.pdf", b"\xff\xd8\xffattachment test\xff\xd9", content_type="application/pdf",
+                "photo.jpg", b"\xff\xd8\xffattachment test\xff\xd9", content_type="image/jpeg",
             )},
             format="multipart",
         )
 
         self.assertEqual(response.status_code, 201)
         document = database.attachments.insert_one.call_args.args[0]
-        self.assertEqual(document["filename"], "report.pdf")
-        self.assertEqual(document["content_type"], "application/pdf")
+        self.assertEqual(document["filename"], "photo.jpg")
+        self.assertEqual(document["content_type"], "image/jpeg")
         self.assertEqual(document["size"], len(b"\xff\xd8\xffattachment test\xff\xd9"))
-        self.assertRegex(document["storage_key"], rf"^{ticket['_id']}/[0-9a-f]{{32}}\.pdf$")
+        self.assertRegex(document["storage_key"], rf"^{ticket['_id']}/[0-9a-f]{{32}}\.jpg$")
         self.assertNotIn("storage_key", response.json()["data"])
         storage.save.assert_called_once()
 
@@ -180,14 +180,14 @@ class ApiTests(TestCase):
     def test_attachment_download_streams_file_for_ticket_owner(self, get_database, private_storage):
         ticket = self.attachment_ticket()
         attachment_id = ObjectId()
-        storage_key = f"{ticket['_id']}/{'a' * 32}.pdf"
+        storage_key = f"{ticket['_id']}/{'a' * 32}.jpg"
         database = MagicMock()
         database.tickets.find_one.return_value = ticket
         database.attachments.find_one.return_value = {
             "_id": attachment_id,
             "ticket_id": ticket["_id"],
-            "filename": "report.pdf",
-            "content_type": "application/pdf",
+            "filename": "photo.jpg",
+            "content_type": "image/jpeg",
             "size": 8,
             "storage_key": storage_key,
         }
@@ -225,7 +225,7 @@ class ApiTests(TestCase):
             upload_response = self.client.post(
                 f"/api/v1/tickets/{ticket['_id']}/attachments/",
                 {"file": SimpleUploadedFile(
-                    "report.pdf", content, content_type="application/pdf",
+                    "photo.jpg", content, content_type="image/jpeg",
                 )},
                 format="multipart",
             )
@@ -270,10 +270,10 @@ class ApiTests(TestCase):
         database.attachments.find_one.return_value = {
             "_id": attachment_id,
             "ticket_id": ticket["_id"],
-            "filename": "report.pdf",
-            "content_type": "application/pdf",
+            "filename": "photo.jpg",
+            "content_type": "image/jpeg",
             "size": 8,
-            "storage_key": f"{ticket['_id']}/{'a' * 32}.pdf",
+            "storage_key": f"{ticket['_id']}/{'a' * 32}.jpg",
         }
         get_database.return_value = database
         storage = MagicMock()
@@ -301,7 +301,7 @@ class ApiTests(TestCase):
         response = self.client.post(
             f"/api/v1/tickets/{ticket['_id']}/attachments/",
             {"file": SimpleUploadedFile(
-                "fake.pdf", b"not a JPEG", content_type="application/pdf",
+                "fake.jpg", b"not a JPEG", content_type="image/jpeg",
             )},
             format="multipart",
         )
@@ -325,7 +325,7 @@ class ApiTests(TestCase):
         response = self.client.post(
             f"/api/v1/tickets/{ticket['_id']}/attachments/",
             {"file": SimpleUploadedFile(
-                "report.pdf", b"\xff\xd8\xff", content_type="application/pdf",
+                "photo.jpg", b"\xff\xd8\xff", content_type="image/jpeg",
             )},
             format="multipart",
         )
@@ -348,7 +348,7 @@ class ApiTests(TestCase):
         response = self.client.post(
             f"/api/v1/tickets/{ticket['_id']}/attachments/",
             {"file": SimpleUploadedFile(
-                "report.pdf", b"\xff\xd8\xffattachment test\xff\xd9", content_type="application/pdf",
+                "photo.jpg", b"\xff\xd8\xffattachment test\xff\xd9", content_type="image/jpeg",
             )},
             format="multipart",
         )
@@ -372,7 +372,7 @@ class ApiTests(TestCase):
         response = self.client.post(
             f"/api/v1/tickets/{ticket['_id']}/attachments/",
             {"file": SimpleUploadedFile(
-                "report.pdf", b"\xff\xd8\xffattachment test\xff\xd9", content_type="application/pdf",
+                "photo.jpg", b"\xff\xd8\xffattachment test\xff\xd9", content_type="image/jpeg",
             )},
             format="multipart",
         )
@@ -384,21 +384,21 @@ class ApiTests(TestCase):
 
     def test_attachment_serializer_does_not_accept_storage_keys_from_clients(self):
         serializer = AttachmentMetadataSerializer(data={
-            "filename": "report.pdf",
-            "content_type": "application/pdf",
+            "filename": "photo.jpg",
+            "content_type": "image/jpeg",
             "size": 8,
-            "storage_key": "../../private/report.pdf",
+            "storage_key": "../../private/photo.jpg",
         })
 
         self.assertTrue(serializer.is_valid(), serializer.errors)
         self.assertNotIn("storage_key", serializer.validated_data)
 
     def test_attachment_serializer_rejects_path_filenames(self):
-        for filename in ("../report.pdf", "folder\\report.pdf", "report\n.pdf"):
+        for filename in ("../photo.jpg", "folder\\photo.jpg", "report\n.jpg"):
             with self.subTest(filename=filename):
                 serializer = AttachmentMetadataSerializer(data={
                     "filename": filename,
-                    "content_type": "application/pdf",
+                    "content_type": "image/jpeg",
                     "size": 8,
                 })
 
