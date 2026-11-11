@@ -382,6 +382,55 @@ class ApiTests(TestCase):
         storage.delete.assert_called_once_with(saved_key)
         database.attachments.delete_one.assert_called_once_with({"storage_key": saved_key})
 
+
+    @patch("core.views.get_database")
+    def test_employee_cannot_create_internal_comment(self, get_database):
+        ticket = self.attachment_ticket()
+        database = MagicMock()
+        database.tickets.find_one.return_value = ticket
+        get_database.return_value = database
+        self.client.force_authenticate(user=self.employee)
+
+        response = self.client.post(
+            f"/api/v1/tickets/{ticket['_id']}/comments/",
+            {"body": "Internal support note", "internal_only": True},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 403)
+        database.ticket_comments.insert_one.assert_not_called()
+
+    @patch("core.views.get_database")
+    def test_employee_comment_list_excludes_internal_notes(self, get_database):
+        ticket = self.attachment_ticket()
+        database = MagicMock()
+        database.tickets.find_one.return_value = ticket
+        database.ticket_comments.count_documents.return_value = 0
+        get_database.return_value = database
+        self.client.force_authenticate(user=self.employee)
+
+        response = self.client.get(f"/api/v1/tickets/{ticket['_id']}/comments/")
+
+        self.assertEqual(response.status_code, 200)
+        database.ticket_comments.count_documents.assert_called_once_with({
+            "ticket_id": ticket["_id"], "internal_only": {"$ne": True},
+        })
+
+    @patch("core.views.get_database")
+    def test_dashboard_limits_employee_ticket_counts_to_owner(self, get_database):
+        database = MagicMock()
+        database.tickets.aggregate.side_effect = [[], []]
+        database.tickets.count_documents.return_value = 2
+        database.notifications.count_documents.return_value = 1
+        get_database.return_value = database
+        self.client.force_authenticate(user=self.employee)
+
+        response = self.client.get("/api/v1/dashboard/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["data"]["total_tickets"], 2)
+        database.tickets.count_documents.assert_called_once_with({"owner_id": self.employee_id})
+
     def test_attachment_serializer_does_not_accept_storage_keys_from_clients(self):
         serializer = AttachmentMetadataSerializer(data={
             "filename": "photo.jpg",
