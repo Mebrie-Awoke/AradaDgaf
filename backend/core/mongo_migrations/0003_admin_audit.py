@@ -1,4 +1,5 @@
 from pymongo import ASCENDING, DESCENDING
+from pymongo.errors import CollectionInvalid
 
 version = 3
 description = "Add immutable audit history for privileged administration actions."
@@ -16,7 +17,10 @@ def upgrade(database):
         },
     }}
     if "admin_audit" not in database.list_collection_names():
-        database.create_collection("admin_audit", validator=validator)
+        try:
+            database.create_collection("admin_audit", validator=validator)
+        except CollectionInvalid:
+            pass
     else:
         database.command({
             "collMod": "admin_audit",
