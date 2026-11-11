@@ -3,6 +3,7 @@ from importlib import import_module
 MIGRATIONS = (
     "core.mongo_migrations.0001_initial",
     "core.mongo_migrations.0002_ticket_workflow",
+    "core.mongo_migrations.0003_admin_audit",
 )
 
 
