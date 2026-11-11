@@ -67,10 +67,7 @@ class NamedResourceSerializer(serializers.Serializer):
 
 class AttachmentMetadataSerializer(serializers.Serializer):
     filename = serializers.CharField(max_length=255, trim_whitespace=True)
-    content_type = serializers.ChoiceField(choices=[
-        "application/pdf", "image/jpeg", "image/png", "text/plain",
-        "application/zip", "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    ])
+    content_type = serializers.ChoiceField(choices=["image/jpeg", "image/png"])
     size = serializers.IntegerField(min_value=1, max_value=settings.MAX_ATTACHMENT_BYTES)
 
     def validate_filename(self, value):
