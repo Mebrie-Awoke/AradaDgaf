@@ -325,7 +325,7 @@ class ApiTests(TestCase):
         response = self.client.post(
             f"/api/v1/tickets/{ticket['_id']}/attachments/",
             {"file": SimpleUploadedFile(
-                "photo.jpg", b"\xff\xd8\xff", content_type="image/jpeg",
+                "photo.jpg", b"\xff\xd8\xffxy", content_type="image/jpeg",
             )},
             format="multipart",
         )
