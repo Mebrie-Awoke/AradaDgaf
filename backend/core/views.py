@@ -167,8 +167,8 @@ class HealthCheckView(APIView):
     def get(self, request):
         return Response({
             "success": True,
-            "message": "Nexora API is running successfully.",
-            "service": "Nexora Backend",
+            "message": "AradaDgaf API is running successfully.",
+            "service": "AradaDgaf Backend",
         }, status=status.HTTP_200_OK)
 
 
