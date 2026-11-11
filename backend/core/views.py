@@ -305,7 +305,9 @@ class TicketListCreateView(APIView):
         database = get_database()
         values = serializer.validated_data
         category_id = require_reference(database, "categories", values.get("category_id"), "category_id")
-        department_id = require_reference(database, "departments", values.get("department_id"), "department_id")
+        department_id = require_reference(
+            database, "departments", values.get("department_id") or request.user.department_id, "department_id"
+        )
         created = now()
         sequence = database.counters.find_one_and_update(
             {"_id": f"ticket:{created.year}"}, {"$inc": {"sequence": 1}},
@@ -317,8 +319,8 @@ class TicketListCreateView(APIView):
             "status": "submitted", "priority": values["priority"],
             "owner_id": ObjectId(request.user.id), "owner_name": request.user.name or request.user.email,
             "assigned_to": None, "category_id": category_id, "department_id": department_id,
-            "created_at": created, "updated_at": created, "resolved_at": None,
-            "closed_at": None, "version": 1,
+            "resolution_note": "", "created_at": created, "updated_at": created,
+            "resolved_at": None, "closed_at": None, "version": 1,
         }
         inserted = database.tickets.insert_one(ticket)
         ticket["_id"] = inserted.inserted_id
@@ -371,6 +373,10 @@ class TicketDetailView(APIView):
                 }
                 if updates["status"] not in transitions[ticket["status"]]:
                     raise ValidationError({"status": f"Cannot change status from {ticket['status']} to {updates['status']}."})
+                if updates["status"] in {"assigned", "in_progress"}:
+                    assignee = updates.get("assigned_to", ticket.get("assigned_to"))
+                    if not assignee:
+                        raise ValidationError({"assigned_to": "Assign the ticket to an active support user before this status change."})
         elif request.user.role == "employee" and ticket["status"] != "resolved":
             raise PermissionDenied("Only resolved tickets can be closed by employees.")
 
@@ -433,7 +439,9 @@ class TicketCommentsView(APIView):
         inserted = database.ticket_comments.insert_one(comment)
         comment["_id"] = inserted.inserted_id
         insert_audit(database, ticket, request.user, "comment_added", {"comment_id": str(inserted.inserted_id)})
-        recipient = ticket["owner_id"] if str(ticket["owner_id"]) != request.user.id else ticket.get("assigned_to")
+        recipient = None if internal_only else (
+            ticket["owner_id"] if str(ticket["owner_id"]) != request.user.id else ticket.get("assigned_to")
+        )
         notify(database, recipient, "ticket_comment", f"A comment was added to ticket {ticket['number']}.", ticket)
         return success(comment, status.HTTP_201_CREATED)
 
