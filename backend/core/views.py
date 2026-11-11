@@ -110,32 +110,10 @@ def public_attachment(document):
 
 
 def valid_attachment_content(content_type, data):
-    if content_type == "application/pdf":
-        return data.startswith(b"%PDF-")
     if content_type == "image/jpeg":
         return data.startswith(b"\xff\xd8\xff") and data.endswith(b"\xff\xd9")
     if content_type == "image/png":
         return data.startswith(b"\x89PNG\r\n\x1a\n") and b"IEND" in data[-16:]
-    if content_type == "text/plain":
-        try:
-            data.decode("utf-8-sig")
-        except UnicodeDecodeError:
-            return False
-        return b"\x00" not in data
-    if content_type in {
-        "application/zip",
-        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    }:
-        try:
-            with zipfile.ZipFile(BytesIO(data)) as archive:
-                names = archive.namelist()
-                if len(names) > 10000:
-                    return False
-                if content_type == "application/zip":
-                    return bool(names)
-                return "[Content_Types].xml" in names and "word/document.xml" in names
-        except (OSError, zipfile.BadZipFile):
-            return False
     return False
 
 
@@ -146,7 +124,7 @@ def validate_storage_key(storage_key, ticket_id):
     if not storage_key.startswith(prefix):
         return False
     filename = storage_key[len(prefix):]
-    return re.fullmatch(r"[0-9a-f]{32}\.(?:pdf|jpg|jpeg|png|txt|zip|docx)", filename) is not None
+    return re.fullmatch(r"[0-9a-f]{32}\.(?:jpg|jpeg|png)", filename) is not None
 
 
 def cleanup_failed_attachment(database, storage, storage_key):
@@ -286,7 +264,7 @@ class TicketListCreateView(APIView):
             upsert=True, return_document=ReturnDocument.AFTER,
         )
         ticket = {
-            "number": f"NX-{created.year}-{sequence['sequence']:06d}",
+            "number": f"AF-{created.year}-{sequence['sequence']:05d}",
             "title": values["title"], "description": values["description"],
             "status": "submitted", "priority": values["priority"],
             "owner_id": ObjectId(request.user.id), "owner_name": request.user.name or request.user.email,
@@ -458,13 +436,9 @@ class TicketAttachmentsView(APIView):
             raise ValidationError({"file": "File exceeds the maximum allowed size."})
         extension = Path(filename).suffix.lower()
         content_types = {
-            ".pdf": "application/pdf",
             ".jpg": "image/jpeg",
             ".jpeg": "image/jpeg",
             ".png": "image/png",
-            ".txt": "text/plain",
-            ".zip": "application/zip",
-            ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         }
         content_type = content_types.get(extension)
         reported_type = (uploaded.content_type or "").lower()
