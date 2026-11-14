@@ -1,0 +1,60 @@
+name: Build Release APKs
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build Android Release APKs
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.x'
+          channel: 'stable'
+
+      - name: Accept Android Licenses
+        run: yes | flutter doctor --android-licenses || true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Analyze code
+        run: flutter analyze
+
+      - name: Run unit tests
+        run: flutter test
+
+      - name: Build Split Release APKs
+        run: >
+          flutter build apk --release --split-per-abi
+          --target-platform android-arm,android-arm64
+          --obfuscate --split-debug-info=build/symbols
+
+      - name: Rename APKs
+        run: |
+          mkdir -p release_apk
+          cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk release_apk/Arada-Digaf-v0.1.0-arm64-v8a.apk
+          cp build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk release_apk/Arada-Digaf-v0.1.0-armeabi-v7a.apk
+
+      - name: Upload Release APKs
+        uses: actions/upload-artifact@v4
+        with:
+          name: arada-digaf-release-apks
+          path: release_apk/*.apk
+
