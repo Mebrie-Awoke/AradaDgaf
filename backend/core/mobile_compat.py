@@ -152,12 +152,18 @@ def mobile_ticket(ticket):
 
 def append_timeline(ticket, title_key, subtitle, at, completed):
     events = list(ticket.get("timeline") or [])
-    events.append({
+    event = {
         "titleKey": title_key,
         "subtitle": subtitle,
         "timestamp": at,
         "isCompleted": completed,
-    })
+    }
+    if title_key == "in_progress":
+        for index, existing in enumerate(events):
+            if existing.get("titleKey") == "in_progress":
+                events[index] = event
+                return events
+    events.append(event)
     return events
 
 
@@ -406,6 +412,7 @@ class MobileRecordWorkView(APIView):
             raise PermissionDenied("Technician access is required.")
         serializer = MobileWorkRecordSerializer(data=normalize_payload(request.data, {
             "device_type": "deviceType",
+            "device_type": "deviceType",
             "serial_number": "serialNumber",
             "problem_description": "problemDescription",
             "tools_materials": "toolsMaterials",
@@ -465,15 +472,8 @@ class MobileRecordWorkView(APIView):
         })
         database.notifications.insert_one({
             "user_id": ticket["owner_id"], "kind": "ticket_resolved",
-            "title": f"Ticket {ticket_number} has been updated.",
-            "message": f"Technician recorded the outcome: {outcome}.",
-            "ticket_id": ticket["_id"], "ticket_number": ticket_number,
-            "created_at": at, "read": False,
-        })
-        database.notifications.insert_one({
-            "user_id": ticket["owner_id"], "kind": "rating_requested",
-            "title": "Please rate your service.",
-            "message": f"Ticket {ticket_number} has been completed. Please rate the service.",
+            "title": f"Ticket {ticket_number}: {outcome}.",
+            "message": f"Technician {technician} recorded the outcome. Please rate your service.",
             "ticket_id": ticket["_id"], "ticket_number": ticket_number,
             "created_at": at, "read": False,
         })
