@@ -405,6 +405,7 @@ class MobileRecordWorkView(APIView):
         if request.user.role not in {"support", "admin"}:
             raise PermissionDenied("Technician access is required.")
         serializer = MobileWorkRecordSerializer(data=normalize_payload(request.data, {
+            "device_type": "deviceType",
             "serial_number": "serialNumber",
             "problem_description": "problemDescription",
             "tools_materials": "toolsMaterials",
@@ -436,7 +437,13 @@ class MobileRecordWorkView(APIView):
             "recorded_by": ObjectId(request.user.id),
         }
         updates = {
-            "work_record": work, "status": "resolved", "mobile_status": mobile_state,
+            "work_record": work,
+            "status": {
+                "solutionGiven": "resolved",
+                "solutionNotGiven": "closed",
+                "referredExternally": "closed",
+            }[outcome],
+            "mobile_status": mobile_state,
             "resolution_note": values["problem_description"], "resolved_at": at,
             "updated_at": at,
             "timeline": append_timeline(
