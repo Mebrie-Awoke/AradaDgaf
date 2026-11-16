@@ -399,7 +399,7 @@ class MobileStartWorkView(APIView):
         if assigned_to and str(assigned_to) != request.user.id and request.user.role != "admin":
             raise PermissionDenied("This request is assigned to another technician.")
         if ticket.get("status") == "in_progress" and assigned_to and str(assigned_to) == request.user.id:
-            return ok(mobile_ticket(ticket))
+            return ok(hydrated_mobile_ticket(database, ticket))
         technician = request.user.name or request.user.email
         updates = {
             "status": "in_progress", "mobile_status": "inProgress",
@@ -500,7 +500,7 @@ class MobileRecordWorkView(APIView):
             "ticket_id": ticket["_id"], "ticket_number": ticket_number,
             "created_at": at, "read": False,
         })
-        return ok(mobile_ticket(updated))
+        return ok(hydrated_mobile_ticket(database, updated))
 
 
 class MobileRateTicketView(APIView):
@@ -524,7 +524,7 @@ class MobileRateTicketView(APIView):
             {"$set": {"service_rating": rating, "updated_at": at}, "$inc": {"version": 1}},
             return_document=ReturnDocument.AFTER,
         )
-        return ok(mobile_ticket(updated))
+        return ok(hydrated_mobile_ticket(database, updated))
 
 
 class MobileNotificationsView(APIView):
