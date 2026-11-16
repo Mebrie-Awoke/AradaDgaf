@@ -150,6 +150,28 @@ def mobile_ticket(ticket):
     }
 
 
+def hydrated_mobile_ticket(database, ticket):
+    """Fill Flutter display fields when a ticket was created through the v1 API."""
+    document = dict(ticket)
+    if not document.get("category") and document.get("category_id"):
+        category = database.categories.find_one({"_id": document["category_id"]})
+        raw_category = (category or {}).get("name", "").strip().lower().replace(" ", "_")
+        document["category"] = raw_category if raw_category in CATEGORIES else "other"
+    if not document.get("department") and document.get("department_id"):
+        department = database.departments.find_one({"_id": document["department_id"]})
+        document["department"] = (department or {}).get("name", "")
+    if document.get("owner_id"):
+        owner = database.users.find_one({"_id": document["owner_id"]})
+        if owner:
+            document.setdefault("owner_name", owner.get("name", ""))
+            document.setdefault("phone_number", owner.get("phone_number", ""))
+            document.setdefault("office_location", owner.get("office_location", ""))
+            if not document.get("department") and owner.get("department_id"):
+                department = database.departments.find_one({"_id": owner["department_id"]})
+                document["department"] = (department or {}).get("name", "")
+    return mobile_ticket(document)
+
+
 def append_timeline(ticket, title_key, subtitle, at, completed):
     events = list(ticket.get("timeline") or [])
     event = {
@@ -285,7 +307,7 @@ class MobileTicketListCreateView(APIView):
         if request.user.role == "employee":
             query["owner_id"] = ObjectId(request.user.id)
         docs = list(get_database().tickets.find(query).sort("created_at", -1).limit(200))
-        return ok([mobile_ticket(doc) for doc in docs])
+        return ok([hydrated_mobile_ticket(get_database(), doc) for doc in docs])
 
     def post(self, request):
         if request.user.role != "employee":
@@ -352,7 +374,7 @@ class MobileTicketListCreateView(APIView):
             "ticket_id": inserted.inserted_id, "ticket_number": number,
             "created_at": utcnow(), "read": False,
         })
-        return ok(mobile_ticket(ticket), status.HTTP_201_CREATED)
+        return ok(hydrated_mobile_ticket(database, ticket), status.HTTP_201_CREATED)
 
 
 class MobileTicketDetailView(APIView):
@@ -360,7 +382,7 @@ class MobileTicketDetailView(APIView):
         database = get_database()
         ticket = find_ticket(database, ticket_number)
         ensure_ticket_access(request.user, ticket)
-        return ok(mobile_ticket(ticket))
+        return ok(hydrated_mobile_ticket(database, ticket))
 
 
 class MobileStartWorkView(APIView):
@@ -403,7 +425,7 @@ class MobileStartWorkView(APIView):
             "ticket_id": ticket["_id"], "ticket_number": ticket_number,
             "created_at": at, "read": False,
         })
-        return ok(mobile_ticket(updated))
+        return ok(hydrated_mobile_ticket(database, updated))
 
 
 class MobileRecordWorkView(APIView):
