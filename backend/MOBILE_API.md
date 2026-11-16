@@ -31,9 +31,13 @@ Roles exposed to the app are `employee` and `technician`; backend `support` and 
 
 The endpoint does not accept the Flutter demo credentials. Accounts must exist in the backend.
 
+### `POST auth/logout/`
+
+Revokes the current bearer token. Requires the authenticated Authorization header.
+
 ## Tickets
 
-- `GET tickets/` — employee sees their own tickets; technicians see the support queue.
+- `GET tickets/` — employee sees their own tickets; technicians see the support queue. Existing v1 tickets are enriched with their linked category, department, and requester profile where available.
 - `POST tickets/` — employee submits a request.
 - `GET tickets/{ticket-number}/` — fetch one ticket by its human-readable `AD-YYYY-NNNN` ID.
 - `POST tickets/{ticket-number}/start-work/` — technician starts work and is assigned to the ticket.
