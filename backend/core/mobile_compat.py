@@ -354,7 +354,7 @@ class MobileTicketListCreateView(APIView):
             "mobile_status": "submitted",
             "priority": "medium",
             "owner_id": ObjectId(request.user.id),
-            "owner_name": values.get("requester_name") or request.user.name or request.user.email,
+            "owner_name": request.user.name or request.user.email,
             "assigned_to": None,
             "assigned_technician": None,
             "timeline": [{
