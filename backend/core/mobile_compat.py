@@ -163,9 +163,12 @@ def hydrated_mobile_ticket(database, ticket):
     if document.get("owner_id"):
         owner = database.users.find_one({"_id": document["owner_id"]})
         if owner:
-            document.setdefault("owner_name", owner.get("name", ""))
-            document.setdefault("phone_number", owner.get("phone_number", ""))
-            document.setdefault("office_location", owner.get("office_location", ""))
+            if not document.get("owner_name"):
+                document["owner_name"] = owner.get("name", "")
+            if not document.get("phone_number"):
+                document["phone_number"] = owner.get("phone_number", "")
+            if not document.get("office_location"):
+                document["office_location"] = owner.get("office_location", "")
             if not document.get("department") and owner.get("department_id"):
                 department = database.departments.find_one({"_id": owner["department_id"]})
                 document["department"] = (department or {}).get("name", "")
