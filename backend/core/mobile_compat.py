@@ -462,6 +462,13 @@ class MobileRecordWorkView(APIView):
             "ticket_id": ticket["_id"], "ticket_number": ticket_number,
             "created_at": at, "read": False,
         })
+        database.notifications.insert_one({
+            "user_id": ticket["owner_id"], "kind": "rating_requested",
+            "title": "Please rate your service.",
+            "message": f"Ticket {ticket_number} has been completed. Please rate the service.",
+            "ticket_id": ticket["_id"], "ticket_number": ticket_number,
+            "created_at": at, "read": False,
+        })
         return ok(mobile_ticket(updated))
 
 
