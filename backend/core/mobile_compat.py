@@ -444,7 +444,6 @@ class MobileRecordWorkView(APIView):
             raise PermissionDenied("Technician access is required.")
         serializer = MobileWorkRecordSerializer(data=normalize_payload(request.data, {
             "device_type": "deviceType",
-            "device_type": "deviceType",
             "serial_number": "serialNumber",
             "problem_description": "problemDescription",
             "tools_materials": "toolsMaterials",
