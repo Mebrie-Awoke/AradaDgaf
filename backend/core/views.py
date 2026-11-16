@@ -164,7 +164,7 @@ class RegistrationView(APIView):
             raise ValidationError({"username": "This username is already in use."})
         user = {
             "email": values["email"], "name": values["name"],
-            "username": username,
+            **({"username": username} if username else {}),
             "phone_number": values.get("phone_number", ""),
             "office_location": values.get("office_location", ""),
             "password": make_password(values["password"]), "role": "employee",
