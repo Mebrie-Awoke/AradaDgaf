@@ -306,8 +306,9 @@ class MobileTicketListCreateView(APIView):
         query = {}
         if request.user.role == "employee":
             query["owner_id"] = ObjectId(request.user.id)
-        docs = list(get_database().tickets.find(query).sort("created_at", -1).limit(200))
-        return ok([hydrated_mobile_ticket(get_database(), doc) for doc in docs])
+        database = get_database()
+        docs = list(database.tickets.find(query).sort("created_at", -1).limit(200))
+        return ok([hydrated_mobile_ticket(database, doc) for doc in docs])
 
     def post(self, request):
         if request.user.role != "employee":
