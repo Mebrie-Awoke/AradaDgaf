@@ -8,6 +8,7 @@ from .mobile_compat import (
     mobile_notification,
     mobile_status,
     mobile_ticket,
+    normalize_payload,
 )
 
 
@@ -82,6 +83,26 @@ class MobileCompatibilityTests(SimpleTestCase):
         })
         self.assertFalse(serializer.is_valid())
         self.assertIn("category", serializer.errors)
+
+    def test_camel_case_flutter_payload_is_normalized(self):
+        payload = normalize_payload({
+            "deviceType": "copyMachine",
+            "problemDescription": "Paper jam",
+            "officeLocation": "Building A",
+            "phoneNumber": "+251911112222",
+            "requesterName": "Employee",
+            "createdAt": "2026-11-16T10:00:00Z",
+        }, {
+            "device_type": "deviceType",
+            "problem_description": "problemDescription",
+            "office_location": "officeLocation",
+            "phone_number": "phoneNumber",
+            "requester_name": "requesterName",
+            "created_at": "createdAt",
+        })
+        self.assertEqual(payload["device_type"], "copyMachine")
+        self.assertEqual(payload["problem_description"], "Paper jam")
+        self.assertEqual(payload["office_location"], "Building A")
 
     def test_work_record_uses_flutter_enum_values(self):
         serializer = MobileWorkRecordSerializer(data={
