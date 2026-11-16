@@ -159,8 +159,14 @@ class RegistrationView(APIView):
         database = get_database()
         values = serializer.validated_data
         department_id = require_reference(database, "departments", values.get("department_id"), "department_id")
+        username = values.get("username")
+        if username and database.users.find_one({"username": username}):
+            raise ValidationError({"username": "This username is already in use."})
         user = {
             "email": values["email"], "name": values["name"],
+            "username": username,
+            "phone_number": values.get("phone_number", ""),
+            "office_location": values.get("office_location", ""),
             "password": make_password(values["password"]), "role": "employee",
             "department_id": department_id, "is_active": True,
             "created_at": now(), "updated_at": now(),
@@ -209,8 +215,14 @@ class UsersView(APIView):
         database = get_database()
         values = serializer.validated_data
         department_id = require_reference(database, "departments", values.get("department_id"), "department_id")
+        username = values.get("username")
+        if username and database.users.find_one({"username": username}):
+            raise ValidationError({"username": "This username is already in use."})
         user = {
             "email": values["email"], "name": values["name"],
+            "username": username,
+            "phone_number": values.get("phone_number", ""),
+            "office_location": values.get("office_location", ""),
             "password": make_password(values["password"]), "role": values["role"],
             "department_id": department_id, "is_active": True,
             "created_at": now(), "updated_at": now(),
