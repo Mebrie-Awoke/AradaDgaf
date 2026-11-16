@@ -72,6 +72,10 @@ The backend exposes versioned REST endpoints and a separate compatibility API in
 
 ```text
 AradaDgaf/
+├── AdministratorPage/       # React administrator portal
+│   ├── src/
+│   ├── package.json
+│   └── README.md
 ├── backend/
 │   ├── core/
 │   │   ├── mongo_migrations/
