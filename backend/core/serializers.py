@@ -8,9 +8,15 @@ from rest_framework import serializers
 class RegistrationSerializer(serializers.Serializer):
     email = serializers.EmailField(max_length=254)
     name = serializers.CharField(max_length=120, trim_whitespace=True)
+    username = serializers.RegexField(regex=r"^[A-Za-z0-9_.-]{3,40}$", required=False)
+    phone_number = serializers.CharField(max_length=30, required=False, allow_blank=True)
+    office_location = serializers.CharField(max_length=200, required=False, allow_blank=True)
     password = serializers.CharField(min_length=12, max_length=128, write_only=True, trim_whitespace=False)
 
     def validate_email(self, value):
+        return value.lower()
+
+    def validate_username(self, value):
         return value.lower()
 
     def validate_password(self, value):
@@ -87,6 +93,12 @@ class UserUpdateSerializer(serializers.Serializer):
     role = serializers.ChoiceField(choices=["employee", "support", "admin"], required=False)
     department_id = serializers.CharField(max_length=24, required=False, allow_null=True, allow_blank=True)
     is_active = serializers.BooleanField(required=False)
+    username = serializers.RegexField(regex=r"^[A-Za-z0-9_.-]{3,40}$", required=False)
+    phone_number = serializers.CharField(max_length=30, required=False, allow_blank=True)
+    office_location = serializers.CharField(max_length=200, required=False, allow_blank=True)
+
+    def validate_username(self, value):
+        return value.lower()
 
     def validate(self, attrs):
         if not attrs:

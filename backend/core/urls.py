@@ -1,5 +1,10 @@
 
 from django.urls import path
+from .mobile_compat import (
+    MobileLoginView, MobileTicketListCreateView, MobileTicketDetailView,
+    MobileStartWorkView, MobileRecordWorkView, MobileRateTicketView,
+    MobileNotificationsView, MobileNotificationReadView,
+)
 from .views import (
     AdminAuditView, DashboardView, HealthCheckView, LoginView, LogoutView, NamedResourceDetailView, NamedResourcesView,
     NotificationDetailView, NotificationsView, RegistrationView,
@@ -8,6 +13,15 @@ from .views import (
 )
 
 urlpatterns = [
+    # Compatibility endpoints matching the current Flutter ticket/user models.
+    path("mobile/auth/login/", MobileLoginView.as_view(), name="mobile-login"),
+    path("mobile/tickets/", MobileTicketListCreateView.as_view(), name="mobile-tickets"),
+    path("mobile/tickets/<str:ticket_number>/", MobileTicketDetailView.as_view(), name="mobile-ticket-detail"),
+    path("mobile/tickets/<str:ticket_number>/start-work/", MobileStartWorkView.as_view(), name="mobile-ticket-start-work"),
+    path("mobile/tickets/<str:ticket_number>/work-record/", MobileRecordWorkView.as_view(), name="mobile-ticket-work-record"),
+    path("mobile/tickets/<str:ticket_number>/rating/", MobileRateTicketView.as_view(), name="mobile-ticket-rating"),
+    path("mobile/notifications/", MobileNotificationsView.as_view(), name="mobile-notifications"),
+    path("mobile/notifications/<str:notification_id>/", MobileNotificationReadView.as_view(), name="mobile-notification-read"),
     path("health/", HealthCheckView.as_view(), name="health-check"),
     path("v1/auth/register/", RegistrationView.as_view(), name="register"),
     path("v1/auth/login/", LoginView.as_view(), name="login"),
