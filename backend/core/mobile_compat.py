@@ -5,6 +5,7 @@ its existing domain model without requiring any changes to the Flutter project.
 They use the existing MongoDB collections and bearer-token authentication.
 """
 import hashlib
+import re
 import secrets
 from datetime import datetime, timedelta, timezone
 
@@ -18,7 +19,6 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .authentication import MongoUser
 from .db import get_database
 from .utils import json_safe
 
@@ -217,12 +217,12 @@ class MobileLoginView(APIView):
         values = serializer.validated_data
         identity = values["username"].strip()
         database = get_database()
+        normalized = identity.lower()
         user_doc = database.users.find_one({
             "$or": [
                 {"username": identity},
-                {"email": identity.lower()},
-                {"email": identity.lower() + "@" + settings.MOBILE_USERNAME_EMAIL_DOMAIN}
-                if getattr(settings, "MOBILE_USERNAME_EMAIL_DOMAIN", "") else {"_id": None},
+                {"email": normalized},
+                {"email": {"$regex": "^" + re.escape(normalized) + "@"}},
             ]
         })
         if (
@@ -344,8 +344,13 @@ class MobileStartWorkView(APIView):
         database = get_database()
         ticket = find_ticket(database, ticket_number)
         at = utcnow()
+        assigned_to = ticket.get("assigned_to")
         if mobile_status(ticket) not in {"submitted", "inProgress"}:
             raise ValidationError({"status": "This request cannot be started in its current state."})
+        if assigned_to and str(assigned_to) != request.user.id and request.user.role != "admin":
+            raise PermissionDenied("This request is assigned to another technician.")
+        if ticket.get("status") == "in_progress" and assigned_to and str(assigned_to) == request.user.id:
+            return ok(mobile_ticket(ticket))
         technician = request.user.name or request.user.email
         updates = {
             "status": "in_progress", "mobile_status": "inProgress",
@@ -386,6 +391,9 @@ class MobileRecordWorkView(APIView):
         ticket = find_ticket(database, ticket_number)
         if ticket.get("status") not in {"in_progress", "assigned"}:
             raise ValidationError({"status": "Start work before recording the outcome."})
+        assigned_to = ticket.get("assigned_to")
+        if assigned_to and str(assigned_to) != request.user.id and request.user.role != "admin":
+            raise PermissionDenied("This request is assigned to another technician.")
         at = values.get("solution_date_time") or utcnow()
         outcome = values["outcome"]
         mobile_state = {
