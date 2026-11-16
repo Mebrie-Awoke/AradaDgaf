@@ -301,6 +301,12 @@ class MobileLoginView(APIView):
         })
 
 
+class MobileLogoutView(APIView):
+    def post(self, request):
+        get_database().access_tokens.delete_one({"_id": request.auth["_id"]})
+        return ok({"message": "Logged out."})
+
+
 class MobileTicketListCreateView(APIView):
     def get(self, request):
         query = {}
