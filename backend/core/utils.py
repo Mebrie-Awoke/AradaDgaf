@@ -28,6 +28,7 @@ def public_user(document):
         "phone_number": document.get("phone_number", ""),
         "office_location": document.get("office_location", ""),
         "role": document["role"],
+        "is_active": document.get("is_active", True),
         "department_id": str(document["department_id"]) if document.get("department_id") else None,
         "created_at": document["created_at"].isoformat(),
     }
