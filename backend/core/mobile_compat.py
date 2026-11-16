@@ -37,6 +37,15 @@ def ok(data, http_status=status.HTTP_200_OK):
     return Response({"success": True, "data": json_safe(data)}, status=http_status)
 
 
+def normalize_payload(data, aliases):
+    """Accept Dart model camelCase keys and conventional API snake_case keys."""
+    values = data.copy()
+    for api_key, model_key in aliases.items():
+        if api_key not in values and model_key in values:
+            values[api_key] = values[model_key]
+    return values
+
+
 def enum_value(value, allowed, field, required=False):
     if value is None and not required:
         return None
@@ -231,8 +240,10 @@ class MobileLoginView(APIView):
             or not check_password(values["password"], user_doc.get("password", ""))
         ):
             raise AuthenticationFailed("Invalid username or password.")
+        if user_doc.get("role") not in {"employee", "support", "admin"}:
+            raise AuthenticationFailed("This account does not have a mobile application role.")
         expected_role = "employee" if user_doc["role"] == "employee" else "technician"
-        if expected_role not in {"employee", "technician"} or (
+        if (
             values.get("role") and values["role"] != expected_role
         ):
             raise AuthenticationFailed("This account does not have the selected role.")
@@ -271,7 +282,14 @@ class MobileTicketListCreateView(APIView):
     def post(self, request):
         if request.user.role != "employee":
             raise PermissionDenied("Only employees can submit service requests.")
-        serializer = MobileTicketCreateSerializer(data=request.data)
+        serializer = MobileTicketCreateSerializer(data=normalize_payload(request.data, {
+            "device_type": "deviceType",
+            "problem_description": "problemDescription",
+            "office_location": "officeLocation",
+            "phone_number": "phoneNumber",
+            "requester_name": "requesterName",
+            "created_at": "createdAt",
+        }))
         serializer.is_valid(raise_exception=True)
         values = serializer.validated_data
         database = get_database()
@@ -384,7 +402,12 @@ class MobileRecordWorkView(APIView):
     def post(self, request, ticket_number):
         if request.user.role not in {"support", "admin"}:
             raise PermissionDenied("Technician access is required.")
-        serializer = MobileWorkRecordSerializer(data=request.data)
+        serializer = MobileWorkRecordSerializer(data=normalize_payload(request.data, {
+            "serial_number": "serialNumber",
+            "problem_description": "problemDescription",
+            "tools_materials": "toolsMaterials",
+            "solution_date_time": "solutionDateTime",
+        }))
         serializer.is_valid(raise_exception=True)
         values = serializer.validated_data
         database = get_database()
@@ -443,7 +466,9 @@ class MobileRecordWorkView(APIView):
 
 class MobileRateTicketView(APIView):
     def post(self, request, ticket_number):
-        serializer = MobileRatingSerializer(data=request.data)
+        serializer = MobileRatingSerializer(data=normalize_payload(request.data, {
+            "rated_at": "ratedAt",
+        }))
         serializer.is_valid(raise_exception=True)
         values = serializer.validated_data
         database = get_database()
