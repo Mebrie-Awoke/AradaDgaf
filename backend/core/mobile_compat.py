@@ -238,7 +238,8 @@ class MobileLoginView(APIView):
         if (
             not user_doc
             or not user_doc.get("is_active", True)
-            or not check_password(values["password"], user_doc.get("password", ""))
+            or not user_doc.get("password")
+            or not check_password(values["password"], user_doc["password"])
         ):
             raise AuthenticationFailed("Invalid username or password.")
         if user_doc.get("role") not in {"employee", "support", "admin"}:
