@@ -44,6 +44,46 @@ Revokes the current bearer token. Requires the authenticated Authorization heade
 - `POST tickets/{ticket-number}/work-record/` — technician records the outcome.
 - `POST tickets/{ticket-number}/rating/` — ticket owner rates completed service.
 
+Example create-ticket payload:
+
+```json
+{
+  "category": "maintenance",
+  "deviceType": "computer",
+  "problemDescription": "Computer cannot connect to the office network.",
+  "department": "Finance",
+  "officeLocation": "Building A, Room 12",
+  "phoneNumber": "+251911112222",
+  "createdAt": "2026-11-16T09:30:00+03:00"
+}
+```
+
+The requester name is taken from the authenticated account, not trusted from the request body.
+
+Example work-record payload:
+
+```json
+{
+  "deviceType": "Computer",
+  "model": "Dell OptiPlex",
+  "serialNumber": "SN12345",
+  "problemDescription": "Replaced the faulty network adapter.",
+  "toolsMaterials": "Network adapter",
+  "outcome": "solutionGiven",
+  "solutionDateTime": "2026-11-16T11:00:00+03:00"
+}
+```
+
+Example rating payload:
+
+```json
+{
+  "quality": "high",
+  "speed": "veryHigh",
+  "ratedAt": "2026-11-16T12:00:00+03:00"
+}
+```
+
 Ticket responses use the Flutter model names: `id`, `category`, `deviceType`, `problemDescription`, `department`, `officeLocation`, `phoneNumber`, `createdAt`, `status`, `requesterName`, `assignedTechnician`, `timeline`, `workRecord`, and `rating`.
 
 Supported category values: `maintenance`, `antivirus`, `software`, `technical`, `other`.
