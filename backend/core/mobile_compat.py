@@ -228,12 +228,13 @@ class MobileLoginView(APIView):
         database = get_database()
         normalized = identity.lower()
         user_doc = database.users.find_one({
-            "$or": [
-                {"username": identity},
-                {"email": normalized},
-                {"email": {"$regex": "^" + re.escape(normalized) + "@"}},
-            ]
+            "$or": [{"username": identity}, {"email": normalized}]
         })
+        if not user_doc and "@" not in identity:
+            matches = list(database.users.find({
+                "email": {"$regex": "^" + re.escape(normalized) + "@"}
+            }).limit(2))
+            user_doc = matches[0] if len(matches) == 1 else None
         if (
             not user_doc
             or not user_doc.get("is_active", True)
