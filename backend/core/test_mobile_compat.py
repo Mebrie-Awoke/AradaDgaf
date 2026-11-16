@@ -1,5 +1,7 @@
 from datetime import datetime, timezone
+from unittest.mock import MagicMock
 
+from bson import ObjectId
 from django.test import SimpleTestCase
 
 from .mobile_compat import (
@@ -8,6 +10,7 @@ from .mobile_compat import (
     mobile_notification,
     mobile_status,
     mobile_ticket,
+    hydrated_mobile_ticket,
     normalize_payload,
 )
 
@@ -114,6 +117,55 @@ class MobileCompatibilityTests(SimpleTestCase):
             "outcome": "solutionGiven",
         })
         self.assertTrue(serializer.is_valid(), serializer.errors)
+
+    def test_work_record_accepts_flutter_camel_case_fields(self):
+        payload = normalize_payload({
+            "deviceType": "Network Device",
+            "serialNumber": "SN-7788",
+            "problemDescription": "Replaced network cable.",
+            "toolsMaterials": "Ethernet cable",
+            "solutionDateTime": "2026-11-16T10:00:00Z",
+            "outcome": "solutionGiven",
+        }, {
+            "device_type": "deviceType",
+            "serial_number": "serialNumber",
+            "problem_description": "problemDescription",
+            "tools_materials": "toolsMaterials",
+            "solution_date_time": "solutionDateTime",
+        })
+        serializer = MobileWorkRecordSerializer(data=payload)
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+        self.assertEqual(serializer.validated_data["device_type"], "Network Device")
+        self.assertEqual(serializer.validated_data["serial_number"], "SN-7788")
+
+    def test_legacy_v1_ticket_is_enriched_for_flutter(self):
+        database = MagicMock()
+        category_id = ObjectId()
+        department_id = ObjectId()
+        owner_id = ObjectId()
+        database.categories.find_one.return_value = {"name": "Maintenance"}
+        database.departments.find_one.return_value = {"name": "Finance"}
+        database.users.find_one.return_value = {
+            "name": "Employee Name",
+            "phone_number": "+251911112222",
+            "office_location": "Building A",
+            "department_id": department_id,
+        }
+        payload = hydrated_mobile_ticket(database, {
+            "number": "AF-2026-0007",
+            "category_id": category_id,
+            "department_id": department_id,
+            "owner_id": owner_id,
+            "title": "Computer maintenance",
+            "description": "Computer is not starting.",
+            "status": "submitted",
+            "created_at": datetime(2026, 11, 16, tzinfo=timezone.utc),
+        })
+        self.assertEqual(payload["category"], "maintenance")
+        self.assertEqual(payload["department"], "Finance")
+        self.assertEqual(payload["requesterName"], "Employee Name")
+        self.assertEqual(payload["phoneNumber"], "+251911112222")
+        self.assertEqual(payload["officeLocation"], "Building A")
 
     def test_notification_shape_matches_flutter_model(self):
         created = datetime(2026, 11, 16, tzinfo=timezone.utc)
