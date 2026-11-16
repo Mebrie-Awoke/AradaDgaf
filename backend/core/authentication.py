@@ -16,6 +16,9 @@ class MongoUser:
         self.pk = self.id
         self.email = document["email"]
         self.name = document.get("name", "")
+        self.username = document.get("username") or document["email"].split("@")[0]
+        self.phone_number = document.get("phone_number", "")
+        self.office_location = document.get("office_location", "")
         self.role = document["role"]
         self.department_id = str(document["department_id"]) if document.get("department_id") else None
         self.is_active = document.get("is_active", True)
