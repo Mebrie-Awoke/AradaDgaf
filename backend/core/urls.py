@@ -3,7 +3,7 @@ from django.urls import path
 from .mobile_compat import (
     MobileLoginView, MobileTicketListCreateView, MobileTicketDetailView,
     MobileStartWorkView, MobileRecordWorkView, MobileRateTicketView,
-    MobileNotificationsView, MobileNotificationReadView,
+    MobileNotificationsView, MobileNotificationReadView, MobileLogoutView,
 )
 from .views import (
     AdminAuditView, DashboardView, HealthCheckView, LoginView, LogoutView, NamedResourceDetailView, NamedResourcesView,
@@ -15,6 +15,7 @@ from .views import (
 urlpatterns = [
     # Compatibility endpoints matching the current Flutter ticket/user models.
     path("mobile/auth/login/", MobileLoginView.as_view(), name="mobile-login"),
+    path("mobile/auth/logout/", MobileLogoutView.as_view(), name="mobile-logout"),
     path("mobile/tickets/", MobileTicketListCreateView.as_view(), name="mobile-tickets"),
     path("mobile/tickets/<str:ticket_number>/", MobileTicketDetailView.as_view(), name="mobile-ticket-detail"),
     path("mobile/tickets/<str:ticket_number>/start-work/", MobileStartWorkView.as_view(), name="mobile-ticket-start-work"),
