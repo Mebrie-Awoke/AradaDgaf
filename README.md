@@ -1,4 +1,4 @@
-# AradaDgaf  
+# AradaDgaf    
 
 **AradaDgaf** is an IT service management and support ticketing platform designed to help organizations receive, assign, track, and resolve employee IT support requests.
 
