@@ -23,6 +23,13 @@ class _LoginScreenState extends State<LoginScreen> {
   String? _errorMessage;
   bool _isSubmitting = false;
 
+  @override
+  void dispose() {
+    _usernameController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
+
   void _onRoleChanged(UserRole role) {
     setState(() {
       _selectedRole = role;
