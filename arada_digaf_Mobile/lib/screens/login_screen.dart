@@ -16,51 +16,43 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen> {
   UserRole _selectedRole = UserRole.employee;
   final TextEditingController _usernameController =
-      TextEditingController(text: 'selam');
+      TextEditingController();
   final TextEditingController _passwordController =
-      TextEditingController(text: '1234');
+      TextEditingController();
   bool _obscurePassword = true;
   String? _errorMessage;
+  bool _isSubmitting = false;
 
   void _onRoleChanged(UserRole role) {
     setState(() {
       _selectedRole = role;
       _errorMessage = null;
-      if (role == UserRole.employee) {
-        _usernameController.text = 'selam';
-        _passwordController.text = '1234';
-      } else {
-        _usernameController.text = 'abel';
-        _passwordController.text = '1234';
-      }
     });
   }
 
-  void _handleLogin() {
+  Future<void> _handleLogin() async {
+    if (_isSubmitting) return;
+    setState(() { _isSubmitting = true; _errorMessage = null; });
     final state = AppScope.of(context);
-    final success = state.login(
+    final success = await state.login(
       _usernameController.text,
       _passwordController.text,
       _selectedRole,
     );
-
+    if (!mounted) return;
     if (success) {
-      if (_selectedRole == UserRole.employee) {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (_) => const EmployeeMainNavigation()),
-        );
-      } else {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (_) => const TechnicianMainNavigation()),
-        );
-      }
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (_) => _selectedRole == UserRole.employee
+              ? const EmployeeMainNavigation()
+              : const TechnicianMainNavigation(),
+        ),
+      );
     } else {
-      setState(() {
-        _errorMessage = state.s.get('invalid_credentials');
-      });
+      setState(() { _errorMessage = state.lastError ?? state.s.get('invalid_credentials'); });
     }
+    if (mounted) setState(() => _isSubmitting = false);
   }
 
   void _showForgotPasswordDialog() {
@@ -71,7 +63,7 @@ class _LoginScreenState extends State<LoginScreen> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Text(s.get('forgot_password')),
         content: Text(
-          '${s.get('not_available_demo')}\n\n${s.get('demo_accounts_hint')}',
+          'Please contact your system administrator to reset your account password.',
           style: const TextStyle(height: 1.4),
         ),
         actions: [
@@ -244,16 +236,16 @@ class _LoginScreenState extends State<LoginScreen> {
 
               // Login Button
               ElevatedButton(
-                onPressed: _handleLogin,
+                onPressed: _isSubmitting ? null : _handleLogin,
                 child: Padding(
                   padding: const EdgeInsets.symmetric(vertical: 4),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      const Icon(Icons.login, size: 20),
+                      if (_isSubmitting) const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) else const Icon(Icons.login, size: 20),
                       const SizedBox(width: 8),
                       Text(
-                        '+ ${s.get('login')}',
+                        _isSubmitting ? 'Signing in...' : s.get('login'),
                         style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                       ),
                     ],
@@ -280,7 +272,6 @@ class _LoginScreenState extends State<LoginScreen> {
 
               const SizedBox(height: 16),
 
-              // Demo Accounts Hint Box
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                 decoration: BoxDecoration(
@@ -294,12 +285,8 @@ class _LoginScreenState extends State<LoginScreen> {
                     const SizedBox(width: 10),
                     Expanded(
                       child: Text(
-                        s.get('demo_accounts_hint'),
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: AppColors.darkGreen,
-                          height: 1.35,
-                        ),
+                        'Use the account provided by your Arada Subcity system administrator.',
+                        style: const TextStyle(fontSize: 12, color: AppColors.darkGreen, height: 1.35),
                       ),
                     ),
                   ],
