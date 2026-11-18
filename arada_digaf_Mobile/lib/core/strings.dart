@@ -37,8 +37,6 @@ const Map<String, String> stringsEn = {
   'password': 'Password',
   'login': 'Login',
   'forgot_password': 'Forgot password?',
-  'demo_accounts_hint': 'Demo accounts: employee selam / 1234, technician abel / 1234',
-  'not_available_demo': 'Not available in demo',
   'invalid_credentials': 'Invalid username or password',
 
   // Employee Home
@@ -147,7 +145,6 @@ const Map<String, String> stringsEn = {
   'about_app': 'About Arada Digaf',
   'help_support': 'Help & Support',
   'logout': 'Logout',
-  'demo_offline_switch': 'Demo: simulate offline',
   'about_desc': 'Arada Digaf - IT Support Ticketing Application for Arada Subcity Administration. Version 0.1.0',
   'support_contact': 'IT Support Helpdesk\nPhone: 8080 / +251 11 123 4567\nEmail: support@aradasubcity.gov.et',
 
