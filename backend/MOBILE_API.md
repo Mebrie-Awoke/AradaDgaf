@@ -1,6 +1,6 @@
 # Flutter Mobile API Contract
 
-The Flutter source currently uses an in-memory repository. The endpoints below are a backend contract for a later frontend integration phase; they do not change or connect the current mock repository.
+The Flutter app now uses an HTTP repository for these endpoints. Authentication tokens are stored using platform secure storage, and the API base URL is supplied at build time through `API_BASE_URL`.
 
 Base URL: `/api/mobile/`
 
@@ -102,6 +102,14 @@ Create-ticket, work-record, and rating requests accept both camelCase Flutter fi
 
 Notification responses use `id`, `title`, `message`, `ticketId`, `timestamp`, `isRead`, and `type`. Types are `submitted`, `resolved`, `ratingRequest`, and `assigned`.
 
-## Important phase boundary
+## Client configuration
 
-These endpoints are additive. The existing `/api/v1/` API remains available, and the Flutter source folder is not modified. The app still uses `MockTicketRepository` until a separate frontend integration phase replaces it with an HTTP repository and production login flow.
+The mobile client reads `API_BASE_URL` at compile time. For a Render deployment, build with the full API prefix, for example:
+
+```powershell
+flutter build apk --release --dart-define=API_BASE_URL=https://YOUR-RENDER-SERVICE.onrender.com/api
+```
+
+For Android Emulator local development, the default is `http://10.0.2.2:8000/api`. For a physical device, pass your development computer's LAN address instead. Use HTTPS for deployed builds.
+
+The mobile client calls the endpoints above for login/logout, ticket CRUD/workflows, ratings, and notifications. Live deployment, backend connectivity, and signed APK testing remain separate verification steps.
