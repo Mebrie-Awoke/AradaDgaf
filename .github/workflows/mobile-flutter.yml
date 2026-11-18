@@ -1,0 +1,31 @@
+name: Flutter mobile checks
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "arada_digaf_Mobile/**"
+      - ".github/workflows/mobile-flutter.yml"
+  pull_request:
+    paths:
+      - "arada_digaf_Mobile/**"
+      - ".github/workflows/mobile-flutter.yml"
+
+jobs:
+  analyze-and-test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: arada_digaf_Mobile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Resolve packages
+        run: flutter pub get
+      - name: Analyze
+        run: flutter analyze
+      - name: Run tests
+        run: flutter test
