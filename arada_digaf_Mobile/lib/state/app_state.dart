@@ -3,7 +3,6 @@ import '../core/strings.dart';
 import '../models/ticket.dart';
 import '../models/user.dart';
 import '../models/notification_item.dart';
-import '../repository/ticket_repository.dart';
 import '../repository/api_ticket_repository.dart';
 
 class TicketDraft {
@@ -45,7 +44,6 @@ class AppState extends ChangeNotifier {
   AppLanguage get language => _language;
   S get s => S(_language);
   User? get currentUser => _currentUser;
-  bool get isOfflineSimulated => false;
   TicketDraft? get pendingDraft => _pendingDraft;
   List<Ticket> get tickets => List.unmodifiable(_tickets);
   List<NotificationItem> get notifications => List.unmodifiable(_notifications);
@@ -114,11 +112,6 @@ class AppState extends ChangeNotifier {
       _pendingDraft = null;
       notifyListeners();
     }
-  }
-
-  void setSimulateOffline(bool value) {
-    // Offline/demo simulation was removed; ticket changes must be persisted by the API.
-    notifyListeners();
   }
 
   void savePendingDraft(TicketDraft draft) { _pendingDraft = draft; notifyListeners(); }
