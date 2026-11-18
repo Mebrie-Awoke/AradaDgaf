@@ -211,7 +211,7 @@ class _TechnicianTicketDetailsScreenState
                           try {
                             await state.startWork(ticket.id);
                           } catch (error) {
-                            if (mounted) {
+                            if (context.mounted) {
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(content: Text(error.toString())),
                               );
