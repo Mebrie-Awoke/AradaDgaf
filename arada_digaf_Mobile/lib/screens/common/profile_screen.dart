@@ -213,7 +213,11 @@ class ProfileScreen extends StatelessWidget {
               // Logout Button
               InkWell(
                 onTap: () async {
-                  await state.logout();
+                  try {
+                    await state.logout();
+                  } catch (_) {
+                    // The local token is cleared even if the server cannot be reached.
+                  }
                   if (!context.mounted) return;
                   Navigator.pushAndRemoveUntil(
                     context,
