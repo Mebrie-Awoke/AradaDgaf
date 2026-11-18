@@ -33,8 +33,8 @@ class _RecordWorkScreenState extends State<RecordWorkScreen> {
   void initState() {
     super.initState();
     _deviceType = widget.ticket.deviceType?.labelEn ?? 'Computer';
-    _modelController = TextEditingController(text: widget.ticket.workRecord?.model ?? 'Dell OptiPlex');
-    _serialController = TextEditingController(text: widget.ticket.workRecord?.serialNumber ?? 'SN12345');
+    _modelController = TextEditingController(text: widget.ticket.workRecord?.model ?? '');
+    _serialController = TextEditingController(text: widget.ticket.workRecord?.serialNumber ?? '');
     _problemController = TextEditingController(
       text: widget.ticket.workRecord?.problemDescription ?? widget.ticket.problemDescription,
     );
@@ -64,20 +64,25 @@ class _RecordWorkScreenState extends State<RecordWorkScreen> {
     );
 
     final state = AppScope.of(context);
-    await state.recordWork(widget.ticket.id, workRecord);
-
-    setState(() => _isSubmitting = false);
-
-    if (!mounted) return;
-
-    ScaffoldMessenger.of(context).showSnackBar(
+    try {
+      await state.recordWork(widget.ticket.id, workRecord);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(state.s.get('work_submitted_success')),
         backgroundColor: AppColors.primaryGreen,
       ),
-    );
-
-    Navigator.pop(context);
+      );
+      Navigator.pop(context);
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(error.toString())),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isSubmitting = false);
+    }
   }
 
   @override
