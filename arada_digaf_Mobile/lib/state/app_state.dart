@@ -129,7 +129,8 @@ class AppState extends ChangeNotifier {
       officeLocation: draft.officeLocation, phoneNumber: draft.phoneNumber,
       requesterName: _currentUser!.fullName, customDate: draft.date,
     );
-    await refreshTickets();
+    _tickets = [ticket, ..._tickets.where((item) => item.id != ticket.id)];
+    await _refreshAfterMutation();
     return ticket;
   }
 
