@@ -17,7 +17,7 @@ class _RateServiceScreenState extends State<RateServiceScreen> {
   RatingLevel? _selectedSpeed;
   bool _isSubmitting = false;
 
-  void _handleSubmit() async {
+  Future<void> _handleSubmit() async {
     if (_selectedQuality == null || _selectedSpeed == null) return;
 
     setState(() => _isSubmitting = true);
@@ -29,20 +29,25 @@ class _RateServiceScreenState extends State<RateServiceScreen> {
     );
 
     final state = AppScope.of(context);
-    await state.rateTicket(widget.ticket.id, rating);
-
-    setState(() => _isSubmitting = false);
-
-    if (!mounted) return;
-
-    ScaffoldMessenger.of(context).showSnackBar(
+    try {
+      await state.rateTicket(widget.ticket.id, rating);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(state.s.get('rating_success')),
         backgroundColor: AppColors.primaryGreen,
       ),
-    );
-
-    Navigator.pop(context);
+      );
+      Navigator.pop(context);
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(error.toString())),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isSubmitting = false);
+    }
   }
 
   @override
