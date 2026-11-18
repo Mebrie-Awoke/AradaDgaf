@@ -24,10 +24,6 @@ class TicketDraft {
     DateTime? date,
   }) : date = date ?? DateTime.now();
 
-  TicketDraft copy() => TicketDraft(
-    category: category, deviceType: deviceType, problemDescription: problemDescription,
-    department: department, officeLocation: officeLocation, phoneNumber: phoneNumber, date: date,
-  );
 }
 
 class AppState extends ChangeNotifier {
@@ -35,7 +31,6 @@ class AppState extends ChangeNotifier {
 
   AppLanguage _language = AppLanguage.amharic;
   User? _currentUser;
-  TicketDraft? _pendingDraft;
   List<Ticket> _tickets = [];
   List<NotificationItem> _notifications = [];
   bool _isLoading = false;
@@ -44,8 +39,6 @@ class AppState extends ChangeNotifier {
   AppLanguage get language => _language;
   S get s => S(_language);
   User? get currentUser => _currentUser;
-  bool get isOfflineSimulated => false;
-  TicketDraft? get pendingDraft => _pendingDraft;
   List<Ticket> get tickets => List.unmodifiable(_tickets);
   List<NotificationItem> get notifications => List.unmodifiable(_notifications);
   bool get isLoading => _isLoading;
@@ -110,13 +103,9 @@ class AppState extends ChangeNotifier {
       _currentUser = null;
       _tickets = [];
       _notifications = [];
-      _pendingDraft = null;
       notifyListeners();
     }
   }
-
-  void savePendingDraft(TicketDraft draft) { _pendingDraft = draft; notifyListeners(); }
-  void clearPendingDraft() { _pendingDraft = null; notifyListeners(); }
 
   Future<Ticket?> submitTicket(TicketDraft draft) async {
     if (_currentUser == null) throw const ApiException('Please sign in before submitting a request.');
@@ -126,7 +115,6 @@ class AppState extends ChangeNotifier {
       officeLocation: draft.officeLocation, phoneNumber: draft.phoneNumber,
       requesterName: _currentUser!.fullName, customDate: draft.date,
     );
-    _pendingDraft = null;
     await refreshTickets();
     return ticket;
   }
