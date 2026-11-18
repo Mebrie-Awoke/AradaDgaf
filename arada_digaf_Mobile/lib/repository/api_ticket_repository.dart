@@ -96,8 +96,12 @@ class ApiTicketRepository implements TicketRepository {
   }
 
   DateTime _date(dynamic value) => DateTime.tryParse('${value ?? ''}')?.toLocal() ?? DateTime.now();
-  T _enumByName<T extends Enum>(List<T> values, dynamic value, T fallback) =>
-      values.where((item) => item.name == value).firstOrNull ?? fallback;
+  T _enumByName<T extends Enum>(List<T> values, dynamic value, T fallback) {
+    for (final item in values) {
+      if (item.name == value) return item;
+    }
+    return fallback;
+  }
 
   Ticket _ticketFromJson(Map<String, dynamic> json) {
     final w = json['workRecord'] is Map ? Map<String, dynamic>.from(json['workRecord']) : null;
