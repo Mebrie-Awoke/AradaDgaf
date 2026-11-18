@@ -69,8 +69,17 @@ class NotificationsScreen extends StatelessWidget {
                   }
 
                   return InkWell(
-                    onTap: () {
-                      state.markNotificationRead(notif.id);
+                    onTap: () async {
+                      try {
+                        await state.markNotificationRead(notif.id);
+                      } catch (error) {
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text(error.toString())),
+                          );
+                        }
+                      }
+                      if (!context.mounted) return;
                       Navigator.push(
                         context,
                         MaterialPageRoute(
