@@ -4,7 +4,6 @@ import '../../core/theme.dart';
 import '../../models/ticket.dart';
 import '../../state/app_scope.dart';
 import '../../state/app_state.dart';
-import '../common/offline_screen.dart';
 import 'ethiopian_date_picker_dialog.dart';
 import 'request_submitted_screen.dart';
 
@@ -48,10 +47,10 @@ class _NewTicketFlowState extends State<NewTicketFlow> {
         (_category == ServiceCategory.maintenance ? DeviceType.computer : null);
 
     _problemController = TextEditingController();
-    _departmentController = TextEditingController(text: 'IT Office');
+    _departmentController = TextEditingController();
     _locationController =
-        TextEditingController(text: 'Building B, 2nd Floor, Room 204');
-    _phoneController = TextEditingController(text: '+251 91 123 4567');
+        TextEditingController();
+    _phoneController = TextEditingController();
 
     _selectedEthDate = EthiopianDate.fromDateTime(DateTime.now());
   }
@@ -134,35 +133,27 @@ class _NewTicketFlowState extends State<NewTicketFlow> {
       date: _selectedEthDate.toDateTime(),
     );
 
-    if (state.isOfflineSimulated) {
-      state.savePendingDraft(draft);
-      setState(() => _isSubmitting = false);
+    try {
+      final ticket = await state.submitTicket(draft);
       if (!mounted) return;
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (_) => OfflineScreen(
-            onViewMyTickets: widget.onViewMyTickets,
+      if (ticket != null) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (_) => RequestSubmittedScreen(
+              ticket: ticket,
+              onViewMyTickets: widget.onViewMyTickets,
+            ),
           ),
-        ),
+        );
+      }
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.toString())),
       );
-      return;
-    }
-
-    final ticket = await state.submitTicket(draft);
-    setState(() => _isSubmitting = false);
-
-    if (!mounted) return;
-    if (ticket != null) {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (_) => RequestSubmittedScreen(
-            ticket: ticket,
-            onViewMyTickets: widget.onViewMyTickets,
-          ),
-        ),
-      );
+    } finally {
+      if (mounted) setState(() => _isSubmitting = false);
     }
   }
 
