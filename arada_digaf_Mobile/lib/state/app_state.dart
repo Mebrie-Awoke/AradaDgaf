@@ -4,7 +4,7 @@ import '../models/ticket.dart';
 import '../models/user.dart';
 import '../models/notification_item.dart';
 import '../repository/ticket_repository.dart';
-import '../repository/mock_ticket_repository.dart';
+import '../repository/api_ticket_repository.dart';
 
 class TicketDraft {
   ServiceCategory category;
@@ -19,187 +19,137 @@ class TicketDraft {
     this.category = ServiceCategory.maintenance,
     this.deviceType = DeviceType.computer,
     this.problemDescription = '',
-    this.department = 'IT Office',
-    this.officeLocation = 'Building B, 2nd Floor, Room 204',
-    this.phoneNumber = '+251 91 123 4567',
+    this.department = '',
+    this.officeLocation = '',
+    this.phoneNumber = '',
     DateTime? date,
   }) : date = date ?? DateTime.now();
 
-  TicketDraft copy() {
-    return TicketDraft(
-      category: category,
-      deviceType: deviceType,
-      problemDescription: problemDescription,
-      department: department,
-      officeLocation: officeLocation,
-      phoneNumber: phoneNumber,
-      date: date,
-    );
-  }
+  TicketDraft copy() => TicketDraft(
+    category: category, deviceType: deviceType, problemDescription: problemDescription,
+    department: department, officeLocation: officeLocation, phoneNumber: phoneNumber, date: date,
+  );
 }
 
 class AppState extends ChangeNotifier {
-  final TicketRepository repository = MockTicketRepository();
+  final ApiTicketRepository repository = ApiTicketRepository();
 
   AppLanguage _language = AppLanguage.amharic;
   User? _currentUser;
-  bool _isOfflineSimulated = false;
   TicketDraft? _pendingDraft;
   List<Ticket> _tickets = [];
   List<NotificationItem> _notifications = [];
   bool _isLoading = false;
-
-  // Predefined demo users
-  static const User demoEmployee = User(
-    username: 'selam',
-    fullName: 'Selam Tesfaye',
-    role: UserRole.employee,
-    department: 'IT Office',
-    officeLocation: 'Building B, 2nd Floor, Room 204',
-    phoneNumber: '+251 91 123 4567',
-  );
-
-  static const User demoTechnician = User(
-    username: 'abel',
-    fullName: 'Abel Mekonnen',
-    role: UserRole.technician,
-    department: 'IT Support Department',
-    officeLocation: 'HQ, Ground Floor, Room 012',
-    phoneNumber: '+251 92 987 6543',
-  );
-
-  AppState() {
-    _loadInitialData();
-  }
+  String? _lastError;
 
   AppLanguage get language => _language;
   S get s => S(_language);
   User? get currentUser => _currentUser;
-  bool get isOfflineSimulated => _isOfflineSimulated;
+  bool get isOfflineSimulated => false;
   TicketDraft? get pendingDraft => _pendingDraft;
-  List<Ticket> get tickets => _tickets;
-  List<NotificationItem> get notifications => _notifications;
+  List<Ticket> get tickets => List.unmodifiable(_tickets);
+  List<NotificationItem> get notifications => List.unmodifiable(_notifications);
   bool get isLoading => _isLoading;
+  String? get lastError => _lastError;
+  int get unreadNotificationsCount => _notifications.where((n) => !n.isRead).length;
 
-  int get unreadNotificationsCount =>
-      _notifications.where((n) => !n.isRead).length;
+  void _setLoading(bool value) {
+    _isLoading = value;
+    notifyListeners();
+  }
+
+  Future<bool> login(String username, String password, UserRole role) async {
+    _setLoading(true);
+    _lastError = null;
+    try {
+      _currentUser = await repository.login(username, password, role);
+      await _loadInitialData();
+      return true;
+    } on ApiException catch (error) {
+      _lastError = error.message;
+      _currentUser = null;
+      return false;
+    } finally {
+      _setLoading(false);
+    }
+  }
 
   Future<void> _loadInitialData() async {
-    _isLoading = true;
-    notifyListeners();
-    _tickets = await repository.getTickets();
-    _notifications = await repository.getNotifications();
-    _isLoading = false;
+    final results = await Future.wait([
+      repository.getTickets(),
+      repository.getNotifications(),
+    ]);
+    _tickets = results[0] as List<Ticket>;
+    _notifications = results[1] as List<NotificationItem>;
     notifyListeners();
   }
 
   Future<void> refreshTickets() async {
-    _isLoading = true;
-    notifyListeners();
-    // Simulate slight network delay for pull to refresh
-    await Future.delayed(const Duration(milliseconds: 600));
-    _tickets = await repository.getTickets();
-    _notifications = await repository.getNotifications();
-    _isLoading = false;
-    notifyListeners();
-  }
-
-  void setLanguage(AppLanguage lang) {
-    _language = lang;
-    notifyListeners();
-  }
-
-  void toggleLanguage() {
-    _language = _language == AppLanguage.amharic
-        ? AppLanguage.english
-        : AppLanguage.amharic;
-    notifyListeners();
-  }
-
-  bool login(String username, String password, UserRole role) {
-    final cleanUser = username.trim().toLowerCase();
-    final cleanPass = password.trim();
-
-    if (role == UserRole.employee) {
-      if (cleanUser == 'selam' && cleanPass == '1234') {
-        _currentUser = demoEmployee;
-        notifyListeners();
-        return true;
-      }
-    } else {
-      if (cleanUser == 'abel' && cleanPass == '1234') {
-        _currentUser = demoTechnician;
-        notifyListeners();
-        return true;
-      }
+    if (_currentUser == null) return;
+    _setLoading(true);
+    _lastError = null;
+    try {
+      await _loadInitialData();
+    } on ApiException catch (error) {
+      _lastError = error.message;
+      rethrow;
+    } finally {
+      _setLoading(false);
     }
-    return false;
   }
 
-  void logout() {
-    _currentUser = null;
+  void setLanguage(AppLanguage lang) { _language = lang; notifyListeners(); }
+  void toggleLanguage() {
+    _language = _language == AppLanguage.amharic ? AppLanguage.english : AppLanguage.amharic;
     notifyListeners();
+  }
+
+  Future<void> logout() async {
+    try {
+      await repository.logout();
+    } finally {
+      _currentUser = null;
+      _tickets = [];
+      _notifications = [];
+      _pendingDraft = null;
+      notifyListeners();
+    }
   }
 
   void setSimulateOffline(bool value) {
-    _isOfflineSimulated = value;
+    // Offline/demo simulation was removed; ticket changes must be persisted by the API.
     notifyListeners();
   }
 
-  void savePendingDraft(TicketDraft draft) {
-    _pendingDraft = draft;
-    notifyListeners();
-  }
-
-  void clearPendingDraft() {
-    _pendingDraft = null;
-    notifyListeners();
-  }
+  void savePendingDraft(TicketDraft draft) { _pendingDraft = draft; notifyListeners(); }
+  void clearPendingDraft() { _pendingDraft = null; notifyListeners(); }
 
   Future<Ticket?> submitTicket(TicketDraft draft) async {
-    if (_isOfflineSimulated) {
-      _pendingDraft = draft;
-      notifyListeners();
-      return null;
-    }
-
+    if (_currentUser == null) throw const ApiException('Please sign in before submitting a request.');
     final ticket = await repository.createTicket(
-      category: draft.category,
-      deviceType: draft.deviceType,
-      problemDescription: draft.problemDescription,
-      department: draft.department,
-      officeLocation: draft.officeLocation,
-      phoneNumber: draft.phoneNumber,
-      requesterName: _currentUser?.fullName ?? 'Employee',
-      customDate: draft.date,
+      category: draft.category, deviceType: draft.deviceType,
+      problemDescription: draft.problemDescription, department: draft.department,
+      officeLocation: draft.officeLocation, phoneNumber: draft.phoneNumber,
+      requesterName: _currentUser!.fullName, customDate: draft.date,
     );
-
     _pendingDraft = null;
-    _tickets = await repository.getTickets();
-    _notifications = await repository.getNotifications();
-    notifyListeners();
+    await refreshTickets();
     return ticket;
   }
 
   Future<void> startWork(String ticketId) async {
-    final techName = _currentUser?.fullName ?? 'Technician';
-    await repository.startWork(ticketId, techName);
-    _tickets = await repository.getTickets();
-    _notifications = await repository.getNotifications();
-    notifyListeners();
+    await repository.startWork(ticketId, _currentUser?.fullName ?? '');
+    await refreshTickets();
   }
 
   Future<void> recordWork(String ticketId, WorkRecord workRecord) async {
     await repository.recordWork(ticketId, workRecord);
-    _tickets = await repository.getTickets();
-    _notifications = await repository.getNotifications();
-    notifyListeners();
+    await refreshTickets();
   }
 
   Future<void> rateTicket(String ticketId, ServiceRating rating) async {
     await repository.rateService(ticketId, rating);
-    _tickets = await repository.getTickets();
-    notifyListeners();
+    await refreshTickets();
   }
 
   Future<void> markNotificationRead(String id) async {
@@ -208,4 +158,3 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 }
-
