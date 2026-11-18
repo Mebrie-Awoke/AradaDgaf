@@ -44,6 +44,7 @@ class AppState extends ChangeNotifier {
   AppLanguage get language => _language;
   S get s => S(_language);
   User? get currentUser => _currentUser;
+  bool get isOfflineSimulated => false;
   TicketDraft? get pendingDraft => _pendingDraft;
   List<Ticket> get tickets => List.unmodifiable(_tickets);
   List<NotificationItem> get notifications => List.unmodifiable(_notifications);
