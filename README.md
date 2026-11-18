@@ -2,7 +2,7 @@
 
 **AradaDgaf** is an IT service management and support ticketing platform designed to help organizations receive, assign, track, and resolve employee IT support requests.
 
-The project provides a Django REST API backed by MongoDB Atlas, with role-based access for employees, support technicians, and administrators. A Flutter mobile application is included in the repository. Its current interface uses a mock data repository; the backend includes a documented mobile API contract for a future integration phase.
+The project provides a Django REST API backed by MongoDB Atlas, with role-based access for employees, support technicians, and administrators. It includes a Flutter mobile client and a React administrator portal. Both clients use the shared backend API.
 
 ---
 
@@ -28,7 +28,7 @@ The project provides a Django REST API backed by MongoDB Atlas, with role-based 
 
 AradaDgaf centralizes IT support operations in one system. Employees can submit technical issues and follow their progress, while support staff can manage incoming requests, record work, and update ticket statuses. Administrators manage users and supporting configuration.
 
-The backend exposes versioned REST endpoints and a separate compatibility API intended to match the data structures used by the Flutter application.
+The backend exposes versioned REST endpoints and a mobile compatibility API matching the Flutter application's data models.
 
 ## Core Features
 
@@ -100,7 +100,7 @@ The backend is responsible for authentication, authorization, ticket workflows, 
 - **Django REST Framework** exposes the HTTP API.
 - **MongoDB Atlas** stores application records such as users, tickets, categories, departments, and notifications.
 - **SQLite** is used for Django's built-in administrative and session-related functionality, not as the primary application database.
-- **Flutter** provides the mobile client interface. The current mobile source still uses an in-memory mock repository and is not yet connected to the live backend API.
+- **Flutter** provides the mobile client interface and communicates with the `/api/mobile/` endpoints using HTTPS in deployed environments. The app stores its bearer token with platform secure storage.
 
 ## Getting Started
 
@@ -245,7 +245,7 @@ The mobile API includes:
 
 See **[backend/MOBILE_API.md](backend/MOBILE_API.md)** for endpoint details, payload examples, and response fields.
 
-> **Integration note:** The compatibility API is a backend contract. The Flutter application currently uses `MockTicketRepository`; it has not yet been switched to HTTP requests against these endpoints.
+The Flutter app uses an HTTP repository for login, tickets, technician workflows, ratings, and notifications. See [backend/MOBILE_API.md](backend/MOBILE_API.md) for API details and the mobile build configuration.
 
 ## Database Migrations
 
@@ -294,9 +294,9 @@ The repository currently contains:
 - A Django REST backend with the primary `/api/v1/` endpoints.
 - A Flutter-oriented compatibility API under `/api/mobile/`.
 - Documentation for the mobile API contract.
-- A Flutter mobile application that still uses mock in-memory data.
+- A Flutter mobile application connected to the compatibility API through an HTTP repository.
 
-The next integration milestone is to verify the backend against a reachable development MongoDB Atlas database, then connect the Flutter data layer to the mobile API and test authentication and ticket workflows end to end.
+The mobile client integration is implemented in source. Flutter analysis, automated tests, live Atlas-backed API workflows, and release APK installation still need to be verified before production use.
 
 ---
 
