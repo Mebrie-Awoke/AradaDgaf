@@ -90,6 +90,20 @@ class AppState extends ChangeNotifier {
     }
   }
 
+  Future<void> _refreshAfterMutation() async {
+    try {
+      _tickets = await repository.getTickets();
+    } on ApiException catch (error) {
+      _lastError = error.message;
+    }
+    try {
+      _notifications = await repository.getNotifications();
+    } on ApiException catch (error) {
+      _lastError = error.message;
+    }
+    notifyListeners();
+  }
+
   void setLanguage(AppLanguage lang) { _language = lang; notifyListeners(); }
   void toggleLanguage() {
     _language = _language == AppLanguage.amharic ? AppLanguage.english : AppLanguage.amharic;
@@ -121,22 +135,29 @@ class AppState extends ChangeNotifier {
 
   Future<void> startWork(String ticketId) async {
     await repository.startWork(ticketId, _currentUser?.fullName ?? '');
-    await refreshTickets();
+    await _refreshAfterMutation();
   }
 
   Future<void> recordWork(String ticketId, WorkRecord workRecord) async {
     await repository.recordWork(ticketId, workRecord);
-    await refreshTickets();
+    await _refreshAfterMutation();
   }
 
   Future<void> rateTicket(String ticketId, ServiceRating rating) async {
     await repository.rateService(ticketId, rating);
-    await refreshTickets();
+    await _refreshAfterMutation();
   }
 
   Future<void> markNotificationRead(String id) async {
     await repository.markNotificationAsRead(id);
-    _notifications = await repository.getNotifications();
+    for (final notification in _notifications) {
+      if (notification.id == id) notification.isRead = true;
+    }
+    try {
+      _notifications = await repository.getNotifications();
+    } on ApiException catch (error) {
+      _lastError = error.message;
+    }
     notifyListeners();
   }
 }
