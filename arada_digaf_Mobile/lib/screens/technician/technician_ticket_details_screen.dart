@@ -202,7 +202,8 @@ class _TechnicianTicketDetailsScreenState
               ],
 
               // Actions according to status
-              if (ticket.status == TicketStatus.submitted) ...[
+              if (ticket.status == TicketStatus.submitted ||
+                  (ticket.status == TicketStatus.inProgress && ticket.assignedTechnician == null)) ...[
                 ElevatedButton(
                   onPressed: _isActionLoading
                       ? null
