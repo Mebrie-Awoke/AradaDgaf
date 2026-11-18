@@ -1,8 +1,7 @@
-"""Compatibility API for the existing AradaDgaf Flutter application.
+"""Compatibility API consumed by the AradaDgaf Flutter mobile application.
 
-The mobile client currently uses an in-memory repository. These endpoints expose
-its existing domain model without requiring any changes to the Flutter project.
-They use the existing MongoDB collections and bearer-token authentication.
+The endpoints expose the mobile client's domain model while using the shared
+MongoDB collections and bearer-token authentication.
 """
 import hashlib
 import re
