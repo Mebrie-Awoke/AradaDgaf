@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import '../../core/strings.dart';
 import '../../core/theme.dart';
 import '../../state/app_scope.dart';
-import '../../state/app_state.dart';
 import '../login_screen.dart';
 
 class ProfileScreen extends StatelessWidget {
@@ -55,7 +54,7 @@ class ProfileScreen extends StatelessWidget {
     final state = AppScope.of(context);
     final s = state.s;
     final isAmharic = state.language.isAmharic;
-    final user = state.currentUser ?? AppState.demoEmployee;
+    final user = state.currentUser;
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -97,7 +96,7 @@ class ProfileScreen extends StatelessWidget {
 
                     // User Name
                     Text(
-                      user.fullName,
+                      user?.fullName ?? '',
                       style: const TextStyle(
                         fontSize: 20,
                         fontWeight: FontWeight.bold,
@@ -116,7 +115,7 @@ class ProfileScreen extends StatelessWidget {
                         border: Border.all(color: AppColors.primaryGreen.withAlpha(80)),
                       ),
                       child: Text(
-                        isAmharic ? user.role.labelAm : user.role.labelEn,
+                        user == null ? '' : (isAmharic ? user.role.labelAm : user.role.labelEn),
                         style: const TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w600,
@@ -127,7 +126,7 @@ class ProfileScreen extends StatelessWidget {
 
                     const SizedBox(height: 12),
                     Text(
-                      '${user.department} • ${user.officeLocation}',
+                      user == null ? '' : '${user.department} • ${user.officeLocation}',
                       textAlign: TextAlign.center,
                       style: const TextStyle(
                         fontSize: 12,
@@ -205,20 +204,6 @@ class ProfileScreen extends StatelessWidget {
 
                     const Divider(height: 1, indent: 16, endIndent: 16, color: AppColors.border),
 
-                    // Demo: Simulate Offline Switch
-                    SwitchListTile(
-                      secondary: const Icon(Icons.wifi_off_outlined, color: AppColors.primaryGreen),
-                      title: Text(
-                        s.get('demo_offline_switch'),
-                        style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
-                      ),
-                      activeTrackColor: AppColors.primaryGreen,
-                      activeThumbColor: Colors.white,
-                      value: state.isOfflineSimulated,
-                      onChanged: (val) {
-                        state.setSimulateOffline(val);
-                      },
-                    ),
                   ],
                 ),
               ),
@@ -227,8 +212,9 @@ class ProfileScreen extends StatelessWidget {
 
               // Logout Button
               InkWell(
-                onTap: () {
-                  state.logout();
+                onTap: () async {
+                  await state.logout();
+                  if (!context.mounted) return;
                   Navigator.pushAndRemoveUntil(
                     context,
                     MaterialPageRoute(builder: (_) => const LoginScreen()),
