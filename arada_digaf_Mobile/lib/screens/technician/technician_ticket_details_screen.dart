@@ -208,8 +208,17 @@ class _TechnicianTicketDetailsScreenState
                       ? null
                       : () async {
                           setState(() => _isActionLoading = true);
-                          await state.startWork(ticket.id);
-                          setState(() => _isActionLoading = false);
+                          try {
+                            await state.startWork(ticket.id);
+                          } catch (error) {
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text(error.toString())),
+                              );
+                            }
+                          } finally {
+                            if (mounted) setState(() => _isActionLoading = false);
+                          }
                         },
                   child: _isActionLoading
                       ? const SizedBox(
