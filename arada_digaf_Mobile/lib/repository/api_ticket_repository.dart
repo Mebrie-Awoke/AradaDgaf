@@ -52,6 +52,10 @@ class ApiTicketRepository implements TicketRepository {
     Map<String, dynamic> decoded;
     try { decoded = jsonDecode(response.body) as Map<String, dynamic>; }
     catch (_) { throw ApiException('The server returned an invalid response (${response.statusCode}).', statusCode: response.statusCode); }
+    if (response.statusCode == 401) {
+      _token = null;
+      await _storage.delete(key: 'arada_access_token');
+    }
     if (response.statusCode < 200 || response.statusCode >= 300 || decoded['success'] != true) {
       throw ApiException(_readableError(decoded['message'] ?? decoded['detail'] ?? decoded['errors']) ?? 'Request failed (${response.statusCode}).', statusCode: response.statusCode);
     }
