@@ -55,12 +55,18 @@ class AppState extends ChangeNotifier {
     _lastError = null;
     try {
       _currentUser = await repository.login(username, password, role);
-      await _loadInitialData();
-      return true;
     } on ApiException catch (error) {
       _lastError = error.message;
       _currentUser = null;
       return false;
+    }
+    try {
+      await _loadInitialData();
+    } on ApiException catch (error) {
+      // Authentication succeeded; let the user enter and retry data loading.
+      _lastError = error.message;
+    }
+    return true;
     } finally {
       _setLoading(false);
     }
