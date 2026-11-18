@@ -30,8 +30,6 @@ const Map<String, String> stringsAm = {
   'password': 'የይለፍ ቃል',
   'login': 'ግባ',
   'forgot_password': 'የይለፍ ቃል ረሱ?',
-  'demo_accounts_hint': 'የማሳያ አካውንቶች: ሰራተኛ selam / 1234, ቴክኒሻን abel / 1234',
-  'not_available_demo': 'በዚህ ማሳያ ላይ አይገኝም',
   'invalid_credentials': 'የተሳሳተ የተጠቃሚ ስም ወይም የይለፍ ቃል',
 
   // Employee Home
@@ -140,7 +138,6 @@ const Map<String, String> stringsAm = {
   'about_app': 'ስለ አራዳ ድጋፍ',
   'help_support': 'እርዳታና ድጋፍ',
   'logout': 'ውጣ',
-  'demo_offline_switch': 'ማሳያ: ኦፍላይን አስመስል',
   'about_desc': 'አራዳ ድጋፍ - የአራዳ ክፍለ ከተማ አስተዳደር የመረጃ ቴክኖሎጂ ድጋፍ አገልግሎት መተግበሪያ። ሥሪት 0.1.0',
   'support_contact': 'የአይቲ ድጋፍ ክፍል\nስልክ: 8080 / +251 11 123 4567\nኢሜይል: support@aradasubcity.gov.et',
 
