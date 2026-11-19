@@ -186,7 +186,8 @@ class LoginView(APIView):
         serializer.is_valid(raise_exception=True)
         database = get_database()
         values = serializer.validated_data
-        user = database.users.find_one({"email": values["email"]})
+        login_id = (values.get("email") or values.get("username") or "").strip().lower()
+        user = database.users.find_one({"$or": [{"email": login_id}, {"username": login_id}]})
         if not user or not user.get("password") or not check_password(values["password"], user["password"]):
             raise AuthenticationFailed("Invalid email or password.")
 
@@ -235,7 +236,11 @@ class UsersView(APIView):
     permission_classes = [IsAdmin]
 
     def get(self, request):
-        return paginate_mongo(get_database().users, request, projection={"password": 0}, transform=public_user)
+        query = {}
+        role = request.query_params.get("role")
+        if role:
+            query["role"] = role
+        return paginate_mongo(get_database().users, request, query=query, projection={"password": 0}, transform=public_user)
 
     def post(self, request):
         serializer = ProvisionUserSerializer(data=request.data)

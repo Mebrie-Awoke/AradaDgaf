@@ -296,6 +296,12 @@ class Command(BaseCommand):
                 res = database.users.insert_one(u)
                 user_map[u["username"]] = res.inserted_id
 
+        database.counters.update_one(
+            {"_id": f"registration:{now.year}"},
+            {"$max": {"sequence": 3}},
+            upsert=True,
+        )
+
         self.stdout.write(self.style.SUCCESS(f"Seeded {len(users_to_seed)} users (including 3 pending registrations)."))
 
         # 4. Sample Tickets

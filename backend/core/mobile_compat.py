@@ -221,14 +221,48 @@ class MobileLoginSerializer(serializers.Serializer):
 
 
 class MobileTicketCreateSerializer(serializers.Serializer):
-    category = serializers.ChoiceField(choices=sorted(CATEGORIES))
-    device_type = serializers.ChoiceField(choices=sorted(DEVICES), required=False, allow_null=True)
+    category = serializers.CharField(max_length=80)
+    device_type = serializers.CharField(max_length=80, required=False, allow_null=True, allow_blank=True)
     problem_description = serializers.CharField(max_length=500, trim_whitespace=True)
     department = serializers.CharField(max_length=120, trim_whitespace=True)
     office_location = serializers.CharField(max_length=200, trim_whitespace=True)
     phone_number = serializers.CharField(max_length=30, trim_whitespace=True)
     requester_name = serializers.CharField(max_length=120, required=False, allow_blank=True)
     created_at = serializers.DateTimeField(required=False)
+
+    def validate_category(self, value):
+        val = value.lower().strip()
+        cat_map = {
+            "maintenance": "maintenance",
+            "network fault": "maintenance",
+            "anti-virus install/renew": "antivirus",
+            "antivirus": "antivirus",
+            "new software install/renew": "software",
+            "software fault repair": "software",
+            "software": "software",
+            "technical support": "technical",
+            "technical": "technical",
+            "printer setup": "maintenance",
+            "other": "other",
+        }
+        val = cat_map.get(val, val)
+        if val not in CATEGORIES:
+            raise serializers.ValidationError(f"Category must be one of: {', '.join(sorted(CATEGORIES))}.")
+        return val
+
+    def validate_device_type(self, value):
+        if not value:
+            return None
+        val = value.strip()
+        dev_map = {
+            "copymachine": "copyMachine",
+            "copy machine": "copyMachine",
+            "computer": "computer",
+            "printer": "printer",
+            "network": "network",
+            "other": "other",
+        }
+        return dev_map.get(val.lower(), val)
 
 
 class MobileWorkRecordSerializer(serializers.Serializer):
@@ -237,14 +271,40 @@ class MobileWorkRecordSerializer(serializers.Serializer):
     serial_number = serializers.CharField(max_length=120, required=False, allow_blank=True, allow_null=True)
     problem_description = serializers.CharField(max_length=1000, trim_whitespace=True)
     tools_materials = serializers.CharField(max_length=500, required=False, allow_blank=True, allow_null=True)
-    outcome = serializers.ChoiceField(choices=sorted(OUTCOMES))
+    outcome = serializers.CharField(max_length=50)
     solution_date_time = serializers.DateTimeField(required=False)
+
+    def validate_outcome(self, value):
+        val_map = {
+            "resolved": "solutionGiven",
+            "not_resolved": "solutionNotGiven",
+            "notResolved": "solutionNotGiven",
+            "referred": "referredExternally",
+        }
+        val = val_map.get(value, value)
+        if val not in OUTCOMES:
+            raise serializers.ValidationError(f"Choose one of: {', '.join(sorted(OUTCOMES))}.")
+        return val
 
 
 class MobileRatingSerializer(serializers.Serializer):
-    quality = serializers.ChoiceField(choices=sorted(RATINGS))
-    speed = serializers.ChoiceField(choices=sorted(RATINGS))
+    quality = serializers.CharField()
+    speed = serializers.CharField()
     rated_at = serializers.DateTimeField(required=False)
+
+    def validate_quality(self, value):
+        val_map = {"5": "veryHigh", "4": "high", "3": "medium", "2": "low", "1": "low", 5: "veryHigh", 4: "high", 3: "medium", 2: "low", 1: "low"}
+        val = val_map.get(value, value)
+        if val not in RATINGS:
+            raise serializers.ValidationError(f"Choose one of: {', '.join(sorted(RATINGS))}.")
+        return val
+
+    def validate_speed(self, value):
+        val_map = {"5": "veryHigh", "4": "high", "3": "medium", "2": "low", "1": "low", 5: "veryHigh", 4: "high", 3: "medium", 2: "low", 1: "low"}
+        val = val_map.get(value, value)
+        if val not in RATINGS:
+            raise serializers.ValidationError(f"Choose one of: {', '.join(sorted(RATINGS))}.")
+        return val
 
 
 class MobileLoginView(APIView):
@@ -375,20 +435,23 @@ class MobileRegisterView(APIView):
         if existing_user and existing_user.get("status") != "rejected":
             raise ValidationError({"username": "This username is already taken."})
 
+        resubmitting_user = existing_user if (existing_user and existing_user.get("status") == "rejected") else None
+        resubmitting_id = resubmitting_user["_id"] if resubmitting_user else None
+
         employee_id = values["employee_id"]
         existing_emp = database.users.find_one({"employee_id": employee_id})
-        if existing_emp and existing_emp.get("status") != "rejected":
+        if existing_emp and existing_emp.get("status") != "rejected" and existing_emp["_id"] != resubmitting_id:
             raise ValidationError({"employee_id": "This employee ID is already registered."})
 
         phone = values["phone"]
         existing_phone = database.users.find_one({"phone_number": phone})
-        if existing_phone and existing_phone.get("status") != "rejected":
+        if existing_phone and existing_phone.get("status") != "rejected" and existing_phone["_id"] != resubmitting_id:
             raise ValidationError({"phone": "This phone number is already registered."})
 
         email = values.get("email")
         if email:
             existing_email = database.users.find_one({"email": email})
-            if existing_email and existing_email.get("status") != "rejected":
+            if existing_email and existing_email.get("status") != "rejected" and existing_email["_id"] != resubmitting_id:
                 raise ValidationError({"email": "This email address is already in use."})
         else:
             email = f"{username}@arada.gov.et"
@@ -406,13 +469,16 @@ class MobileRegisterView(APIView):
         resolved_dept_name = dept_doc["name"] if dept_doc else dept_input
 
         created = utcnow()
-        counter = database.counters.find_one_and_update(
-            {"_id": f"registration:{created.year}"},
-            {"$inc": {"sequence": 1}},
-            upsert=True,
-            return_document=ReturnDocument.AFTER,
-        )
-        ref_number = f"REG-{created.year}-{counter['sequence']:04d}"
+        while True:
+            counter = database.counters.find_one_and_update(
+                {"_id": f"registration:{created.year}"},
+                {"$inc": {"sequence": 1}},
+                upsert=True,
+                return_document=ReturnDocument.AFTER,
+            )
+            ref_number = f"REG-{created.year}-{counter['sequence']:04d}"
+            if not database.users.find_one({"registration_reference": ref_number}):
+                break
 
         role = "employee" if values["role"] == "employee" else "support"
         user_record = {
@@ -451,7 +517,10 @@ class MobileRegisterView(APIView):
             inserted = database.users.insert_one(user_record)
             inserted_id = inserted.inserted_id
 
+        user_record["_id"] = inserted_id
+
         database.admin_audit.insert_one({
+            "actor_id": inserted_id,
             "action": "registration_submitted",
             "actor_name": values["full_name"],
             "actor_username": username,
@@ -643,7 +712,14 @@ class MobileRecordWorkView(APIView):
     def post(self, request, ticket_number):
         if request.user.role not in {"support", "admin"}:
             raise PermissionDenied("Technician access is required.")
-        serializer = MobileWorkRecordSerializer(data=normalize_payload(request.data, {
+        payload = request.data.copy()
+        if "problem_description" not in payload and "problemDescription" not in payload:
+            payload["problem_description"] = payload.get("actionTaken") or payload.get("action_taken") or "Work completed"
+        if "device_type" not in payload and "deviceType" not in payload:
+            payload["device_type"] = "network"
+        if "outcome" not in payload and "resolution" in payload:
+            payload["outcome"] = payload["resolution"]
+        serializer = MobileWorkRecordSerializer(data=normalize_payload(payload, {
             "device_type": "deviceType",
             "serial_number": "serialNumber",
             "problem_description": "problemDescription",
@@ -714,7 +790,18 @@ class MobileRecordWorkView(APIView):
 
 class MobileRateTicketView(APIView):
     def post(self, request, ticket_number):
-        serializer = MobileRatingSerializer(data=normalize_payload(request.data, {
+        payload = request.data.copy()
+        if "quality" not in payload and "qualityRating" in payload:
+            payload["quality"] = payload["qualityRating"]
+        elif "quality" not in payload and "rating" in payload:
+            payload["quality"] = payload["rating"]
+
+        if "speed" not in payload and "speedRating" in payload:
+            payload["speed"] = payload["speedRating"]
+        elif "speed" not in payload and "rating" in payload:
+            payload["speed"] = payload["rating"]
+
+        serializer = MobileRatingSerializer(data=normalize_payload(payload, {
             "rated_at": "ratedAt",
         }))
         serializer.is_valid(raise_exception=True)

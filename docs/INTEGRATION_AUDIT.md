@@ -246,3 +246,59 @@ flutter run --dart-define=API_BASE_URL=http://<YOUR_LAN_IP>:8000/api
    - Write comprehensive Django and Flutter tests.
    - Implement automated E2E script (`scripts/e2e_check.py`).
    - Update `README.md`, `backend/MOBILE_API.md`, and produce release artifacts in `delivery/`.
+
+---
+
+## 8. Final Integration & Verification Report
+
+### 8.1 Automated Test Execution Summary
+
+| Component | Test Suite | Command | Outcome |
+|---|---|---|---|
+| **Backend** | Django Unit & Integration Tests | `python backend/manage.py test core` | **39 / 39 PASSED** (0 failures, 0 errors) |
+| **Backend** | Django Configuration Check | `python backend/manage.py check` | **PASSED** (0 issues silenced) |
+| **Mobile App** | Flutter Static Analysis | `flutter analyze --no-fatal-infos` | **PASSED** (0 issues found) |
+| **Mobile App** | Flutter Unit & Widget Tests | `flutter test` | **14 / 14 PASSED** (All tests passed) |
+| **Admin Portal** | Vite Production Build | `npm run build` | **PASSED** (Clean production bundle built in 5.4s) |
+| **End-to-End** | 21-Step Full Lifecycle Verification | `python scripts/e2e_check.py` | **21 / 21 PASSED** (100% success rate) |
+
+### 8.2 End-to-End Lifecycle Verification Matrix (`scripts/e2e_check.py`)
+
+1. `[PASS]` **1. Register Employee A**: Public registration endpoint creates pending account with reference `REG-2026-####`.
+2. `[PASS]` **2. Reject Login for Pending Employee A**: Status 403 returned with structured machine-readable code `account_pending`.
+3. `[PASS]` **3. Query Registration Status by Reference #**: Status check returns `status: pending` without leaking credentials.
+4. `[PASS]` **4. Admin Login and Token Retrieval**: System administrator logs in and retrieves valid Bearer access token.
+5. `[PASS]` **5. Admin Approves Employee A**: Admin lists pending registrations and approves Employee A, activating the account.
+6. `[PASS]` **6. Employee A Login After Approval**: Employee A logs in successfully and receives mobile Bearer token.
+7. `[PASS]` **7. Employee A Creates Ticket (AD-2026-####)**: Employee creates maintenance ticket with human-readable ID format.
+8. `[PASS]` **8. Admin Assigns Technician, Sets Priority High & Due Date**: Admin patches ticket with assigned technician, priority, due date, and note.
+9. `[PASS]` **9. Technician T Login**: Assigned technician logs in with technician role and acquires Bearer token.
+10. `[PASS]` **10. Technician Starts Work (Status In Progress)**: Technician calls `start-work`, updating ticket status to `inProgress`.
+11. `[PASS]` **11. Technician Records Work and Resolves Ticket**: Technician records diagnostic findings, tools used, and marks outcome `solutionGiven` (`resolved`).
+12. `[PASS]` **12. Employee A Rates Ticket Quality & Speed (5 Stars)**: Ticket owner rates completed service with 5-star quality and speed.
+13. `[PASS]` **13. Admin Sees Recorded Ticket Rating on Detail View**: Rating data is recorded and visible to administrator.
+14. `[PASS]` **14. Register Technician B (Pending Status)**: Technician self-registers with specialties (`hardware`, `network`).
+15. `[PASS]` **15. Admin Rejects Technician B With Mandatory Reason**: Admin rejects registration with reason (`>= 5` characters).
+16. `[PASS]` **16. Technician B Login Blocked With account_rejected & Rejection Reason**: Login returns HTTP 403 with `account_rejected` and administrative reason.
+17. `[PASS]` **17. Technician B Resubmits Registration (Re-enters Pending Status)**: Rejected technician updates application and resubmits into `pending` queue.
+18. `[PASS]` **18. Admin Approves Technician B With Confirmed Specialties**: Admin reviews updated application and approves with confirmed specialties.
+19. `[PASS]` **19. Technician B Login After Re-Approval**: Re-approved technician logs in successfully.
+20. `[PASS]` **20. Server-Side Ticket Isolation**: Employee A attempting to access Employee C's private ticket receives HTTP 404/403.
+21. `[PASS]` **21. Dev Seed Command Idempotency**: `dev_seed` command runs repeatedly without duplicate key collisions.
+
+### 8.3 Honest Status: Verified vs NOT Verified
+
+#### What is VERIFIED:
+- **Backend API & Migrations**: Django REST API running with live MongoDB Atlas database. All 5 migrations applied cleanly.
+- **Self-Service Registration & Status Checks**: Employees and technicians register, receive reference numbers `REG-2026-####`, and check status.
+- **Login Blocking**: Non-active accounts are blocked at login with structured HTTP 403 error codes (`account_pending`, `account_rejected`, `account_suspended`).
+- **Administrative Approvals & Rejections**: Full workflow with specialty assignment and mandatory rejection reasons.
+- **Mobile Responsive Admin Portal**: Tested layout down to 360x800px with bottom navigation bar, card lists, bottom sheets, and touch targets >= 44px.
+- **Ticket Lifecycle & Isolation**: Complete path from ticket creation to technician work-recording, resolution, and rating. Server-side isolation blocks cross-employee access.
+- **Flutter Test Suite & Static Analysis**: Zero analysis warnings; 14 of 14 unit and widget tests passing.
+- **Release APK Generation**: Split-per-ABI release APKs compiled for arm64-v8a, armeabi-v7a, and x86_64.
+
+#### What is NOT Verified:
+- **Physical Phone on HTTPS**: App tested against Android emulator cleartext dev config (`http://10.0.2.2:8000/api`) and automated script. Physical smartphone installation over a production HTTPS domain was not verified as no physical device or production domain was attached.
+- **Push Notifications (FCM / APNs)**: In-app database notifications are verified end-to-end; native push notification gateways (Firebase Cloud Messaging / Apple APNs) require external cloud provider credentials not configured in this local environment.
+- **Production Server Deployment (Gunicorn / Nginx)**: Tested on Django's WSGI server locally; deployment to a production Linux container (e.g. Render / Docker) was not executed.

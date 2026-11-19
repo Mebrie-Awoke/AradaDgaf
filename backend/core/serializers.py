@@ -11,6 +11,14 @@ TECHNICIAN_SPECIALTIES = [
     "Software",
     "Printers & copiers",
     "Anti-virus & security",
+    "General",
+    "network",
+    "hardware",
+    "software",
+    "printer",
+    "cctv",
+    "general",
+    "antivirus",
 ]
 
 
@@ -53,11 +61,14 @@ class RegistrationSerializer(serializers.Serializer):
 
 
 class LoginSerializer(serializers.Serializer):
-    email = serializers.EmailField(max_length=254)
+    email = serializers.CharField(max_length=254, required=False, allow_blank=True)
+    username = serializers.CharField(max_length=254, required=False, allow_blank=True)
     password = serializers.CharField(max_length=128, write_only=True, trim_whitespace=False)
 
-    def validate_email(self, value):
-        return value.lower()
+    def validate(self, attrs):
+        if not attrs.get("email") and not attrs.get("username"):
+            raise serializers.ValidationError("Email or username is required.")
+        return attrs
 
 
 class ProvisionUserSerializer(RegistrationSerializer):

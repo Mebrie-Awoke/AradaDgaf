@@ -109,43 +109,155 @@ The backend is responsible for authentication, authorization, ticket workflows, 
 Install the following before setting up the project:
 
 - Python 3.11 or later
-- pip
-- MongoDB Atlas account and database
+- Node.js 18+ and npm
+- Flutter SDK (3.24+ recommended, tested with Flutter 3.44.8 / Dart 3.12.2)
+- Android SDK (for mobile builds/emulation)
+- MongoDB Atlas account or cluster (URI configured in `.env`)
 - Git
 
-### 1. Clone the repository
+---
+
+### 1. Backend Setup & Run
+
+From the repository root:
 
 ```powershell
-git clone https://github.com/Mebrie-Awoke/AradaDgaf.git
-cd AradaDgaf
-```
-
-### 2. Create and activate a virtual environment
-
-On Windows PowerShell:
-
-```powershell
-py -3 -m venv .venv
+# Create and activate virtual environment
+cd backend
+python -m venv .venv
 .\.venv\Scripts\Activate.ps1
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Configure environment variables (copy from .env.example)
+copy .env.example .env
+# Edit .env to set MONGODB_URI and MONGODB_DATABASE=AradaDgaf
+
+# Run Django system checks & tests
+python manage.py check
+python manage.py test core --verbosity 2
+
+# Seed the development database (DEV ONLY)
+python manage.py dev_seed --force
+
+# Start the development backend server
+python manage.py runserver 0.0.0.0:8000
 ```
 
-If PowerShell blocks script activation, use Command Prompt instead:
+The backend API will be available at:
+- Base API: `http://127.0.0.1:8000/api/`
+- Mobile Compatibility API: `http://127.0.0.1:8000/api/mobile/`
+- Administrator Portal API: `http://127.0.0.1:8000/api/v1/`
 
-```cmd
-.venv\Scripts\activate.bat
-```
+---
 
-### 3. Install backend dependencies
+### 2. Administrator Portal Setup & Run
+
+The administrator portal is a responsive Vite + React web application designed for desktop monitors and mobile touchscreens (down to 360x800px).
 
 ```powershell
-python -m pip install -r backend\requirements.txt
+cd AdministratorPage
+
+# Install npm dependencies
+npm install
+
+# Configure environment variables
+copy .env.example .env
+# Verify VITE_API_URL=http://127.0.0.1:8000/api/v1
+
+# Start the Vite development server
+npm run dev
+
+# Or build for production
+npm run build
 ```
 
-### 4. Configure environment variables
+The admin portal will be running at `http://localhost:5173/` (or the port reported by Vite).
 
-Create a local `.env` file from the project's environment template, if provided, and configure the required values. See [Environment Configuration](#environment-configuration).
+---
 
-Do not commit your local `.env` file or share credentials in source control.
+### 3. Flutter Mobile Application Setup & Run
+
+The Flutter mobile application supports both English and Amharic, Ethiopian calendar conversion, employee ticket reporting & rating, technician work logs, and user self-registration with real administrative approval.
+
+```powershell
+cd arada_digaf_Mobile
+
+# Fetch dependencies
+flutter pub get
+
+# Run static analysis and widget/unit tests
+flutter analyze --no-fatal-infos
+flutter test
+
+# Run on Android Emulator (points to host via 10.0.2.2)
+flutter run --dart-define=API_BASE_URL=http://10.0.2.2:8000/api
+
+# Run on Physical Android Device (replace 192.168.1.X with your dev PC's LAN IP)
+# Ensure your PC firewall allows incoming traffic on port 8000 and runserver is bound to 0.0.0.0:8000
+flutter run --dart-define=API_BASE_URL=http://192.168.1.50:8000/api
+
+# Build release APKs (split by ABI)
+flutter build apk --release --split-per-abi --dart-define=API_BASE_URL=http://10.0.2.2:8000/api
+```
+
+Release APK outputs are placed in `arada_digaf_Mobile/build/app/outputs/flutter-apk/`:
+- `app-arm64-v8a-release.apk` (modern 64-bit Android devices)
+- `app-armeabi-v7a-release.apk` (legacy 32-bit Android devices)
+- `app-x86_64-release.apk` (64-bit Android emulators)
+
+---
+
+### 4. Automated End-to-End Verification
+
+A comprehensive 21-step E2E lifecycle test script is included in `scripts/e2e_check.py`. It verifies:
+- Self-service employee and technician registration
+- Login blocking with machine-readable codes (`account_pending`, `account_rejected`, `account_suspended`)
+- Administrator review, approval with specialty confirmation, and rejection with mandatory reason
+- Re-submission of rejected registration
+- Ticket creation, assignment with due date and priority, technician start-work, work-record, and rating
+- Server-side ticket isolation (employee cannot view another employee's tickets)
+- Dev seed idempotency
+
+To run the verification:
+
+```powershell
+python scripts\e2e_check.py
+```
+
+---
+
+## Development Seed Credentials (DEV ONLY)
+
+> [!WARNING]
+> **DEV ONLY**: The credentials below are pre-seeded solely for local testing and demonstration. Dev seeding is disabled in production unless `DEV_SEED_ENABLED=true` is set. Never use these credentials in production environments.
+
+### Administrator Accounts
+| Role | Username | Email | Password | Purpose |
+|---|---|---|---|---|
+| **System Administrator** | `admin` | `admin@arada.gov.et` | `AdminPassword123!` | Full portal access: approve/reject registrations, assign tickets, manage users & categories |
+
+### IT Support Technicians
+| Specialty | Username | Email | Password | Status |
+|---|---|---|---|---|
+| **Network Support** | `tech_network` | `tech.network@arada.gov.et` | `TechPassword123!` | Active (Specialties: Network, Anti-virus & security) |
+| **Hardware Support** | `tech_hardware` | `tech.hardware@arada.gov.et` | `TechPassword123!` | Active (Specialties: Hardware, Printers & copiers) |
+| **Software Support** | `tech_software` | `tech.software@arada.gov.et` | `TechPassword123!` | Active (Specialties: Software, Anti-virus & security) |
+
+### Active Employees
+| Department | Username | Email | Password | Status |
+|---|---|---|---|---|
+| **Finance Department** | `selam` | `selam.worku@arada.gov.et` | `EmpPassword123!` | Active (Accounts Payable, Room 204) |
+| **HR Department** | `dawit` | `dawit.kebede@arada.gov.et` | `EmpPassword123!` | Active (Personnel Records, Room 105) |
+| **Legal Affairs** | `almaz` | `almaz.haile@arada.gov.et` | `EmpPassword123!` | Active (Legal Consultation, Room 302) |
+
+### Pre-Seeded Pending Registrations (For Testing Approval Workflow)
+| Role | Username | Reference # | Department / Specialties | Initial Status |
+|---|---|---|---|---|
+| **Employee** | `tariku` | `REG-2026-0001` | Planning Department (Strategic Planning) | Pending Approval |
+| **Employee** | `marta` | `REG-2026-0002` | Administration (Executive Office) | Pending Approval |
+| **Technician** | `yosef` | `REG-2026-0003` | IT Office (Specialties: Network, Hardware) | Pending Approval |
 
 ## Environment Configuration
 
