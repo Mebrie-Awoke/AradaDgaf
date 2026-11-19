@@ -150,8 +150,9 @@ class HealthCheckView(APIView):
 
 
 class RegistrationView(APIView):
-    permission_classes = [AllowAny]
-    authentication_classes = []
+    # Public self-registration is intentionally disabled. Staff accounts are
+    # provisioned only by an authenticated administrator through /v1/users/.
+    permission_classes = [IsAdmin]
 
     def post(self, request):
         serializer = RegistrationSerializer(data=request.data)
@@ -279,6 +280,53 @@ class UserDetailView(APIView):
             "changes": changes, "created_at": now(),
         })
         return success({"user": public_user(updated)})
+
+    def delete(self, request, user_id):
+        database = get_database()
+        target_id = parse_object_id(user_id, "user_id")
+        target = database.users.find_one({"_id": target_id})
+        if not target:
+            raise NotFound("User not found.")
+        if target_id == ObjectId(request.user.id):
+            raise ValidationError({"user": "You cannot delete your own administrator account."})
+        if target.get("role") == "admin" and database.users.count_documents({
+            "role": "admin", "is_active": {"$ne": False},
+        }) <= 1:
+            raise ValidationError({"user": "At least one active administrator must remain."})
+
+        # Preserve ticket history. If a support person is removed, release their
+        # active assignments so tickets return to the administrator's queue.
+        if target.get("role") == "support":
+            active_tickets = database.tickets.find({
+                "assigned_to": target_id, "status": {"$in": ["assigned", "in_progress"]},
+            })
+            for ticket in active_tickets:
+                insert_audit(database, ticket, request.user, "technician_removed",
+                             {"assigned_to": str(target_id), "status": "submitted"})
+            database.tickets.update_many(
+                {"assigned_to": target_id, "status": {"$in": ["assigned", "in_progress"]}},
+                {"$set": {
+                    "assigned_to": None, "assigned_technician": None,
+                    "status": "submitted", "mobile_status": "submitted",
+                    "started_at": None, "updated_at": now(),
+                }, "$inc": {"version": 1}},
+            )
+            database.tickets.update_many(
+                {"assigned_to": target_id},
+                {"$set": {"assigned_to": None, "assigned_technician": None, "updated_at": now()},
+                 "$inc": {"version": 1}},
+            )
+
+        database.access_tokens.delete_many({"user_id": target_id})
+        database.notifications.delete_many({"user_id": target_id})
+        database.users.delete_one({"_id": target_id})
+        database.admin_audit.insert_one({
+            "actor_id": ObjectId(request.user.id), "actor_email": request.user.email,
+            "action": "user_deleted", "target_user_id": target_id,
+            "changes": {"email": target.get("email"), "role": target.get("role")},
+            "created_at": now(),
+        })
+        return success({"message": "User deleted. Related ticket history was preserved."})
 
 
 class TicketListCreateView(APIView):
@@ -534,6 +582,28 @@ class NamedResourceDetailView(APIView):
             "changes": changes, "created_at": now(),
         })
         return success(updated)
+
+    def delete(self, request, resource, resource_id):
+        if request.user.role != "admin":
+            raise PermissionDenied("Administrator access is required.")
+        database = get_database()
+        target_id = parse_object_id(resource_id, "resource_id")
+        target = database[resource].find_one({"_id": target_id})
+        if not target:
+            raise NotFound("Record not found.")
+
+        # Soft-delete named resources because existing tickets may reference them.
+        database[resource].update_one(
+            {"_id": target_id},
+            {"$set": {"is_active": False, "updated_at": now()}},
+        )
+        database.admin_audit.insert_one({
+            "actor_id": ObjectId(request.user.id), "actor_email": request.user.email,
+            "action": f"{ {'departments': 'department', 'categories': 'category'}[resource] }_deactivated",
+            "target_id": target_id, "changes": {"is_active": {"from": target.get("is_active", True), "to": False}},
+            "created_at": now(),
+        })
+        return success({"message": "Record deactivated. Existing ticket history was preserved."})
 
 
 class AdminAuditView(APIView):
