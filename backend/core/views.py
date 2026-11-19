@@ -290,11 +290,17 @@ class UserDetailView(APIView):
                     "assigned_to": str(target_id), "status": "submitted",
                 })
             database.tickets.update_many(
-                {"assigned_to": target_id},
+                {"assigned_to": target_id, "status": {"$in": ["assigned", "in_progress"]}},
                 {"$set": {
                     "assigned_to": None, "assigned_technician": None,
                     "status": "submitted", "mobile_status": "submitted",
                     "started_at": None, "updated_at": now(),
+                }, "$inc": {"version": 1}},
+            )
+            database.tickets.update_many(
+                {"assigned_to": target_id, "status": {"$nin": ["assigned", "in_progress"]}},
+                {"$set": {
+                    "assigned_to": None, "assigned_technician": None, "updated_at": now(),
                 }, "$inc": {"version": 1}},
             )
         return success({"user": public_user(updated)})
