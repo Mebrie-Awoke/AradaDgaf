@@ -69,13 +69,18 @@ class ApiTests(TestCase):
         self.assertEqual(logout.status_code, 200)
         database.access_tokens.delete_one.assert_called_once()
 
-    def test_ticket_ownership_is_limited_to_owner_or_support(self):
+    def test_ticket_access_is_limited_to_owner_assignee_or_admin(self):
         ticket = {"owner_id": self.employee_id}
         other = MongoUser({**self.employee_doc, "_id": ObjectId()})
-        support = MongoUser({**self.employee_doc, "role": "support"})
+        support_id = ObjectId()
+        support = MongoUser({**self.employee_doc, "_id": support_id, "role": "support"})
+        admin = MongoUser({**self.employee_doc, "_id": ObjectId(), "role": "admin"})
         self.assertTrue(can_access_ticket(self.employee, ticket))
         self.assertFalse(can_access_ticket(other, ticket))
+        self.assertFalse(can_access_ticket(support, ticket))
+        ticket["assigned_to"] = support_id
         self.assertTrue(can_access_ticket(support, ticket))
+        self.assertTrue(can_access_ticket(admin, ticket))
 
     @patch("core.views.get_database")
     def test_employee_creates_ticket_with_server_owned_fields_and_audit(self, get_database):

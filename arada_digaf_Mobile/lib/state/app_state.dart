@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../core/strings.dart';
 import '../models/ticket.dart';
@@ -35,6 +36,8 @@ class AppState extends ChangeNotifier {
   List<NotificationItem> _notifications = [];
   bool _isLoading = false;
   String? _lastError;
+  Timer? _updatesTimer;
+  bool _pollingUpdates = false;
 
   AppLanguage get language => _language;
   S get s => S(_language);
@@ -67,6 +70,7 @@ class AppState extends ChangeNotifier {
         // Authentication succeeded; let the user enter and retry data loading.
         _lastError = error.message;
       }
+      _startUpdatesPolling();
       return true;
     } finally {
       _setLoading(false);
@@ -81,6 +85,31 @@ class AppState extends ChangeNotifier {
     _tickets = results[0] as List<Ticket>;
     _notifications = results[1] as List<NotificationItem>;
     notifyListeners();
+  }
+
+  void _startUpdatesPolling() {
+    _updatesTimer?.cancel();
+    _updatesTimer = Timer.periodic(const Duration(seconds: 25), (_) {
+      _pollLatestUpdates();
+    });
+  }
+
+  Future<void> _pollLatestUpdates() async {
+    if (_currentUser == null || _pollingUpdates) return;
+    _pollingUpdates = true;
+    try {
+      await _loadInitialData();
+    } on ApiException catch (error) {
+      _lastError = error.message;
+    } finally {
+      _pollingUpdates = false;
+    }
+  }
+
+  @override
+  void dispose() {
+    _updatesTimer?.cancel();
+    super.dispose();
   }
 
   Future<void> refreshTickets() async {
@@ -118,6 +147,8 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> logout() async {
+    _updatesTimer?.cancel();
+    _updatesTimer = null;
     try {
       await repository.logout();
     } finally {

@@ -63,6 +63,8 @@ def find_ticket(database, ticket_number):
 def ensure_ticket_access(user, ticket):
     if user.role == "employee" and str(ticket.get("owner_id")) != user.id:
         raise NotFound("Ticket not found.")
+    if user.role == "support" and str(ticket.get("assigned_to") or "") != user.id:
+        raise NotFound("Ticket not found.")
     if user.role not in {"employee", "support", "admin"}:
         raise PermissionDenied()
 
@@ -73,7 +75,7 @@ def mobile_status(ticket):
         return explicit
     return {
         "submitted": "submitted",
-        "assigned": "inProgress",
+        "assigned": "submitted",
         "in_progress": "inProgress",
         "resolved": "resolved",
         "closed": "resolved",
@@ -159,6 +161,10 @@ def hydrated_mobile_ticket(database, ticket):
     if not document.get("department") and document.get("department_id"):
         department = database.departments.find_one({"_id": document["department_id"]})
         document["department"] = (department or {}).get("name", "")
+    if document.get("assigned_to"):
+        assignee = database.users.find_one({"_id": document["assigned_to"]})
+        if assignee:
+            document["assigned_technician"] = assignee.get("name") or assignee.get("email")
     if document.get("owner_id"):
         owner = database.users.find_one({"_id": document["owner_id"]})
         if owner:
@@ -272,7 +278,9 @@ class MobileLoginView(APIView):
             or not check_password(values["password"], user_doc["password"])
         ):
             raise AuthenticationFailed("Invalid username or password.")
-        if user_doc.get("role") not in {"employee", "support", "admin"}:
+        if user_doc.get("role") == "admin":
+            raise AuthenticationFailed("Administrator accounts must use the web administrator portal.")
+        if user_doc.get("role") not in {"employee", "support"}:
             raise AuthenticationFailed("This account does not have a mobile application role.")
         expected_role = "employee" if user_doc["role"] == "employee" else "technician"
         if (
@@ -314,6 +322,10 @@ class MobileTicketListCreateView(APIView):
         query = {}
         if request.user.role == "employee":
             query["owner_id"] = ObjectId(request.user.id)
+        elif request.user.role == "support":
+            query["assigned_to"] = ObjectId(request.user.id)
+        elif request.user.role != "admin":
+            raise PermissionDenied()
         database = get_database()
         docs = list(database.tickets.find(query).sort("created_at", -1).limit(200))
         return ok([hydrated_mobile_ticket(database, doc) for doc in docs])
@@ -396,16 +408,18 @@ class MobileTicketDetailView(APIView):
 
 class MobileStartWorkView(APIView):
     def post(self, request, ticket_number):
-        if request.user.role not in {"support", "admin"}:
-            raise PermissionDenied("Technician access is required.")
+        if request.user.role != "support":
+            raise PermissionDenied("Only registered IT support personnel can start assigned work.")
         database = get_database()
         ticket = find_ticket(database, ticket_number)
         at = utcnow()
         assigned_to = ticket.get("assigned_to")
-        if mobile_status(ticket) not in {"submitted", "inProgress"}:
+        if not assigned_to or str(assigned_to) != request.user.id:
+            raise PermissionDenied("This request is not assigned to your account.")
+        if ticket.get("status") not in {"assigned", "in_progress"}:
             raise ValidationError({"status": "This request cannot be started in its current state."})
-        if assigned_to and str(assigned_to) != request.user.id and request.user.role != "admin":
-            raise PermissionDenied("This request is assigned to another technician.")
+        if ticket.get("status") == "in_progress":
+            return ok(hydrated_mobile_ticket(database, ticket))
         if ticket.get("status") == "in_progress" and assigned_to and str(assigned_to) == request.user.id:
             return ok(hydrated_mobile_ticket(database, ticket))
         technician = request.user.name or request.user.email
@@ -439,8 +453,8 @@ class MobileStartWorkView(APIView):
 
 class MobileRecordWorkView(APIView):
     def post(self, request, ticket_number):
-        if request.user.role not in {"support", "admin"}:
-            raise PermissionDenied("Technician access is required.")
+        if request.user.role != "support":
+            raise PermissionDenied("Only registered IT support personnel can record work.")
         serializer = MobileWorkRecordSerializer(data=normalize_payload(request.data, {
             "device_type": "deviceType",
             "serial_number": "serialNumber",
@@ -455,8 +469,8 @@ class MobileRecordWorkView(APIView):
         if ticket.get("status") not in {"in_progress", "assigned"}:
             raise ValidationError({"status": "Start work before recording the outcome."})
         assigned_to = ticket.get("assigned_to")
-        if assigned_to and str(assigned_to) != request.user.id and request.user.role != "admin":
-            raise PermissionDenied("This request is assigned to another technician.")
+        if not assigned_to or str(assigned_to) != request.user.id:
+            raise PermissionDenied("This request is not assigned to your account.")
         at = values.get("solution_date_time") or utcnow()
         outcome = values["outcome"]
         mobile_state = {

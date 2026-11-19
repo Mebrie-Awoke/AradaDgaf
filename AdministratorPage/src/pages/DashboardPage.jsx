@@ -50,7 +50,7 @@ export default function DashboardPage({ go }) {
     + (stats?.by_status?.assigned || 0)
     + (stats?.by_status?.in_progress || 0);
   const personnel = users.filter((user) =>
-    ["support", "admin"].includes(user.role) && user.is_active !== false
+    user.role === "support" && user.is_active !== false
   ).length;
   const displayValue = (value) => stats ? value : "—";
 
@@ -77,7 +77,7 @@ export default function DashboardPage({ go }) {
       <Stat label="Total tickets" value={displayValue(total)} detail="Recorded service requests" icon={ClipboardList} color="blue"/>
       <Stat label="Open workload" value={displayValue(open)} detail="Awaiting or being handled" icon={Clock3} color="amber"/>
       <Stat label="Resolved tickets" value={displayValue(stats?.by_status?.resolved || 0)} detail="Successfully completed" icon={ClipboardCheck} color="green"/>
-      <Stat label="Active IT personnel" value={loading && !stats ? "—" : personnel} detail="Support and administrator accounts" icon={Users} color="violet"/>
+      <Stat label="Active IT support" value={loading && !stats ? "—" : personnel} detail="Registered, active support accounts" icon={Users} color="violet"/>
     </div>
 
     <div className="dashboard-grid">

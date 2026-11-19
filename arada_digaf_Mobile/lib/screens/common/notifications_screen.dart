@@ -3,6 +3,8 @@ import '../../core/theme.dart';
 import '../../models/notification_item.dart';
 import '../../state/app_scope.dart';
 import '../employee/ticket_details_screen.dart';
+import '../technician/technician_ticket_details_screen.dart';
+import '../../models/user.dart';
 
 class NotificationsScreen extends StatelessWidget {
   const NotificationsScreen({super.key});
@@ -83,7 +85,9 @@ class NotificationsScreen extends StatelessWidget {
                       Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (_) => TicketDetailsScreen(ticketId: notif.ticketId),
+                          builder: (_) => state.currentUser?.role == UserRole.technician
+                            ? TechnicianTicketDetailsScreen(ticketId: notif.ticketId)
+                            : TicketDetailsScreen(ticketId: notif.ticketId),
                         ),
                       );
                     },

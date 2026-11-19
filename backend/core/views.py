@@ -287,6 +287,8 @@ class TicketListCreateView(APIView):
         query = {}
         if request.user.role == "employee":
             query["owner_id"] = ObjectId(request.user.id)
+        elif request.user.role == "support":
+            query["assigned_to"] = ObjectId(request.user.id)
         for field in ("status", "priority"):
             value = request.query_params.get(field)
             allowed = {"submitted", "assigned", "in_progress", "resolved", "closed"} if field == "status" else {"low", "medium", "high", "critical"}
@@ -361,17 +363,21 @@ class TicketDetailView(APIView):
                 raise PermissionDenied("Employees may only close a resolved ticket.")
         elif request.user.role not in {"support", "admin"}:
             raise PermissionDenied()
+        if "assigned_to" in updates and request.user.role != "admin":
+            raise PermissionDenied("Only an administrator can assign or reassign service requests.")
         if request.user.role in {"support", "admin"} and set(updates) & privileged_fields:
             if "assigned_to" in updates:
                 assignee = updates["assigned_to"]
                 if assignee:
                     assignee_id = parse_object_id(assignee, "assigned_to")
-                    assignee_doc = database.users.find_one({"_id": assignee_id, "role": {"$in": ["support", "admin"]}, "is_active": {"$ne": False}})
+                    assignee_doc = database.users.find_one({"_id": assignee_id, "role": "support", "is_active": {"$ne": False}})
                     if not assignee_doc:
-                        raise ValidationError({"assigned_to": "Assignee must be an active support user."})
+                        raise ValidationError({"assigned_to": "Choose an active IT support person. Administrator accounts cannot receive assignments."})
                     updates["assigned_to"] = assignee_id
+                    updates["assigned_technician"] = assignee_doc.get("name") or assignee_doc.get("email")
                 else:
                     updates["assigned_to"] = None
+                    updates["assigned_technician"] = None
             for field, collection in (("category_id", "categories"), ("department_id", "departments")):
                 if field in updates:
                     updates[field] = require_reference(database, collection, updates[field], field)
@@ -416,8 +422,13 @@ class TicketDetailView(APIView):
         if not result:
             raise APIException("Ticket changed concurrently; reload and retry.", code="write_conflict")
         insert_audit(database, result, request.user, "ticket_updated", changed)
-        if "assigned_to" in updates and updates["assigned_to"]:
-            notify(database, updates["assigned_to"], "ticket_assigned", f"Ticket {ticket['number']} was assigned to you.", result)
+        if "assigned_to" in changed:
+            previous_assignee = ticket.get("assigned_to")
+            next_assignee = result.get("assigned_to")
+            if previous_assignee and str(previous_assignee) != str(next_assignee):
+                notify(database, previous_assignee, "ticket_reassigned", f"Ticket {ticket['number']} was reassigned to another IT support person.", result)
+            if next_assignee:
+                notify(database, next_assignee, "ticket_assigned", f"Ticket {ticket['number']} was assigned to you.", result)
         if "status" in updates:
             notify(database, ticket["owner_id"], "ticket_status_changed", f"Ticket {ticket['number']} is now {updates['status']}.", result)
         return success(result)

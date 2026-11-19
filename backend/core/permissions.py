@@ -12,4 +12,8 @@ class IsAdmin(BasePermission):
 
 
 def can_access_ticket(user, ticket):
-    return user.role in {"support", "admin"} or str(ticket.get("owner_id")) == user.id
+    if user.role == "admin":
+        return True
+    if user.role == "support":
+        return str(ticket.get("assigned_to") or "") == user.id
+    return user.role == "employee" and str(ticket.get("owner_id")) == user.id

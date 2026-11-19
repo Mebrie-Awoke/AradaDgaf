@@ -19,7 +19,7 @@ class MobileCompatibilityTests(SimpleTestCase):
     def test_existing_backend_statuses_map_to_flutter_status_names(self):
         cases = {
             "submitted": "submitted",
-            "assigned": "inProgress",
+            "assigned": "submitted",
             "in_progress": "inProgress",
             "resolved": "resolved",
             "closed": "resolved",
@@ -182,3 +182,9 @@ class MobileCompatibilityTests(SimpleTestCase):
         self.assertEqual(payload["ticketId"], "AD-2026-0423")
         self.assertEqual(payload["type"], "submitted")
         self.assertFalse(payload["isRead"])
+        assigned = mobile_notification({
+            "_id": "notification-2", "kind": "ticket_assigned",
+            "message": "A ticket was assigned to you.", "ticket_number": "AF-2026-0007",
+            "created_at": created, "read": False,
+        })
+        self.assertEqual(assigned["type"], "assigned")

@@ -68,15 +68,16 @@ export default function UsersPage() {
     }
   }
 
-  const filtered = users.filter((user) =>
+  const personnel = users.filter((user) => ["admin", "support"].includes(user.role));
+  const filtered = personnel.filter((user) =>
     [user.name, user.email, user.username, user.role]
       .join(" ").toLowerCase().includes(query.trim().toLowerCase())
   );
 
   return <>
     <div className="page-heading">
-      <div><div className="eyebrow">TEAM DIRECTORY</div><h1>People & access</h1>
-        <p>Provision staff accounts and manage administrator and IT support access.</p></div>
+      <div><div className="eyebrow">PERSONNEL DIRECTORY</div><h1>People & access</h1>
+        <p>Manage administrator accounts and registered IT support personnel.</p></div>
       <div className="heading-actions">
         <button className="secondary-btn" onClick={load} disabled={busy}><RefreshCw size={16}/> Refresh</button>
         <button className="primary-btn" onClick={() => { setForm(blank); setModal(true); setError(""); }}>
@@ -89,8 +90,8 @@ export default function UsersPage() {
     {notice && <div className="alert-success" role="status">{notice}<button onClick={() => setNotice("")} aria-label="Dismiss notification"><X size={14}/></button></div>}
 
     <div className="people-stats">
-      <div className="mini-stat"><Users size={18}/><span>Accounts loaded</span><b>{users.length}</b></div>
-      <div className="mini-stat"><UserCog size={18}/><span>IT support</span><b>{users.filter((user) => user.role === "support").length}</b></div>
+      <div className="mini-stat"><Users size={18}/><span>IT personnel</span><b>{personnel.length}</b></div>
+      <div className="mini-stat"><UserCog size={18}/><span>Active IT support</span><b>{users.filter((user) => user.role === "support" && user.is_active !== false).length}</b></div>
       <div className="mini-stat"><Shield size={18}/><span>Administrators</span><b>{users.filter((user) => user.role === "admin").length}</b></div>
     </div>
 
@@ -102,7 +103,7 @@ export default function UsersPage() {
       </div>
       {busy ? <div className="empty-state">Loading account directory…</div>
         : filtered.length === 0 ? <div className="empty-state">
-          {users.length === 0 ? "No user accounts are available." : "No accounts match your search."}
+          {personnel.length === 0 ? "No IT personnel are registered yet. The administrator account will appear here." : "No personnel match your search."}
         </div>
         : <div className="table-wrap"><table>
           <thead><tr><th>Person</th><th>Role</th><th>Department</th><th>Contact</th><th>Access</th></tr></thead>
@@ -112,7 +113,7 @@ export default function UsersPage() {
               <div><b>{user.name || "Unnamed account"}</b><small>{user.email}</small></div>
             </div></td>
             <td><span className={`role-pill ${user.role}`}>
-              {user.role === "support" ? "IT Support" : user.role === "admin" ? "Administrator" : "Employee"}
+              {user.role === "support" ? "IT Support" : "Administrator"}
             </span></td>
             <td>{departments.find((department) => department.id === user.department_id)?.name || "—"}</td>
             <td>{user.phone_number || "—"}</td>
@@ -137,7 +138,7 @@ export default function UsersPage() {
           <div className="form-field"><label htmlFor="user-username">Username</label><input id="user-username" required minLength="3" value={form.username} onChange={(event) => setForm({ ...form, username: event.target.value })}/></div>
           <div className="form-field"><label htmlFor="user-password">Initial password (12+ characters)</label><input id="user-password" type="password" required minLength="12" autoComplete="new-password" value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })}/></div>
           <div className="form-field"><label htmlFor="user-role">Role</label><select id="user-role" value={form.role} onChange={(event) => setForm({ ...form, role: event.target.value })}>
-            <option value="support">IT Support</option><option value="admin">Administrator</option><option value="employee">Employee</option>
+            <option value="support">IT Support</option><option value="admin">Administrator</option>
           </select></div>
           <div className="form-field"><label htmlFor="user-department">Department</label><select id="user-department" value={form.department_id} onChange={(event) => setForm({ ...form, department_id: event.target.value })}>
             <option value="">No department</option>{departments.map((department) => <option key={department.id} value={department.id}>{department.name}</option>)}
