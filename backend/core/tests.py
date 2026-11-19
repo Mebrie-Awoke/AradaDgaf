@@ -125,14 +125,16 @@ class ApiTests(TestCase):
     def test_support_can_resolve_ticket_and_resolution_is_audited(self, get_database):
         database = MagicMock()
         ticket_id = ObjectId()
+        support_id = ObjectId()
         ticket = {
             "_id": ticket_id, "number": "AF-2026-000001", "owner_id": self.employee_id,
+            "assigned_to": support_id,
             "status": "in_progress", "priority": "medium", "version": 1,
         }
         database.tickets.find_one.return_value = ticket
         database.tickets.find_one_and_update.return_value = {**ticket, "status": "resolved", "resolution_note": "Reconfigured the network adapter.", "version": 2}
         get_database.return_value = database
-        support = MongoUser({**self.employee_doc, "_id": ObjectId(), "role": "support"})
+        support = MongoUser({**self.employee_doc, "_id": support_id, "role": "support"})
         self.client.force_authenticate(user=support)
         response = self.client.patch(f"/api/v1/tickets/{ticket_id}/", {"status": "resolved", "resolution_note": "Reconfigured the network adapter."}, format="json")
         self.assertEqual(response.status_code, 200)
