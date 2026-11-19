@@ -1,10 +1,10 @@
-
 from django.urls import path
 from .mobile_compat import (
     MobileLoginView, MobileTicketListCreateView, MobileTicketDetailView,
     MobileStartWorkView, MobileRecordWorkView, MobileRateTicketView,
     MobileNotificationsView, MobileNotificationReadView, MobileLogoutView,
 )
+from .readiness import ReadinessCheckView
 from .views import (
     AdminAuditView, DashboardView, HealthCheckView, LoginView, LogoutView, NamedResourceDetailView, NamedResourcesView,
     NotificationDetailView, NotificationsView, RegistrationView,
@@ -24,6 +24,7 @@ urlpatterns = [
     path("mobile/notifications/", MobileNotificationsView.as_view(), name="mobile-notifications"),
     path("mobile/notifications/<str:notification_id>/", MobileNotificationReadView.as_view(), name="mobile-notification-read"),
     path("health/", HealthCheckView.as_view(), name="health-check"),
+    path("ready/", ReadinessCheckView.as_view(), name="readiness-check"),
     path("v1/auth/register/", RegistrationView.as_view(), name="register"),
     path("v1/auth/login/", LoginView.as_view(), name="login"),
     path("v1/auth/logout/", LogoutView.as_view(), name="logout"),

@@ -4,8 +4,8 @@ services:
     runtime: python
     rootDir: backend
     buildCommand: pip install -r requirements.txt
-    startCommand: python manage.py migrate --noinput && gunicorn config.wsgi:application --bind 0.0.0.0:$PORT --workers 2 --timeout 120
-    healthCheckPath: /api/health/
+    startCommand: python manage.py migrate --noinput && python manage.py migrate_mongo && gunicorn config.wsgi:application --bind 0.0.0.0:$PORT --workers 2 --timeout 120
+    healthCheckPath: /api/ready/
     envVars:
       - key: DJANGO_ENV
         value: production
