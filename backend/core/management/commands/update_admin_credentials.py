@@ -4,6 +4,7 @@ from django.contrib.auth.hashers import make_password
 from django.core.management.base import BaseCommand, CommandError
 from django.core.validators import validate_email
 from django.utils import timezone
+from pymongo.errors import DuplicateKeyError
 
 from core.db import get_database
 
@@ -15,8 +16,8 @@ class Command(BaseCommand):
     )
 
     def add_arguments(self, parser):
-        parser.add_argument("current_email")
-        parser.add_argument("new_email")
+        parser.add_argument("current_email", help="Current administrator email address")
+        parser.add_argument("new_email", help="New administrator email address")
 
     def handle(self, *args, **options):
         current_email = options["current_email"].strip().lower()
@@ -32,7 +33,8 @@ class Command(BaseCommand):
         admin = database.users.find_one({"email": current_email, "role": "admin"})
         if not admin:
             raise CommandError(
-                "No administrator with the current email was found. No changes were made."
+                "No administrator was found with that current email address. "
+                "No database records were changed."
             )
 
         duplicate = database.users.find_one({
@@ -41,7 +43,7 @@ class Command(BaseCommand):
         })
         if duplicate:
             raise CommandError(
-                "The new email is already assigned to another account. No changes were made."
+                "The new email address is already in use. No database records were changed."
             )
 
         password = getpass("New administrator password (minimum 12 characters): ")
@@ -53,22 +55,28 @@ class Command(BaseCommand):
         if password != confirmation:
             raise CommandError("Passwords do not match. No changes were made.")
 
-        result = database.users.update_one(
-            {"_id": admin["_id"], "role": "admin"},
-            {
-                "$set": {
-                    "email": new_email,
-                    "password": make_password(password),
-                    "updated_at": timezone.now(),
-                }
-            },
-        )
+        try:
+            result = database.users.update_one(
+                {"_id": admin["_id"], "role": "admin"},
+                {
+                    "$set": {
+                        "email": new_email,
+                        "password": make_password(password),
+                        "updated_at": timezone.now(),
+                    }
+                },
+            )
+        except DuplicateKeyError as exc:
+            raise CommandError(
+                "The new email address is already in use. No database records were changed."
+            ) from exc
+
         if result.modified_count != 1:
             raise CommandError("The administrator record was not changed.")
 
         self.stdout.write(
             self.style.SUCCESS(
                 f"Updated administrator credentials for {new_email}. "
-                "The existing account ID and role were preserved."
+                "The existing account ID, role, and other profile fields were preserved."
             )
         )
