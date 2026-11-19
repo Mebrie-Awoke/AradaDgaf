@@ -5,6 +5,9 @@ import '../models/user.dart';
 import '../state/app_scope.dart';
 import 'employee/employee_main_navigation.dart';
 import 'technician/technician_main_navigation.dart';
+import 'pending_approval_screen.dart';
+import 'registration_rejected_screen.dart';
+import 'registration_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -57,9 +60,63 @@ class _LoginScreenState extends State<LoginScreen> {
         ),
       );
     } else {
-      setState(() { _errorMessage = state.lastError ?? state.s.get('invalid_credentials'); });
+      final authEx = state.lastAuthException;
+      if (authEx?.code == 'account_pending') {
+        final ref = authEx?.data?['referenceNumber']?.toString() ?? '';
+        final un = authEx?.data?['username']?.toString() ?? _usernameController.text.trim();
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => PendingApprovalScreen(
+              referenceNumber: ref,
+              username: un,
+            ),
+          ),
+        );
+      } else if (authEx?.code == 'account_rejected') {
+        final ref = authEx?.data?['referenceNumber']?.toString() ?? '';
+        final un = _usernameController.text.trim();
+        final reason = authEx?.data?['rejectionReason']?.toString() ?? authEx?.message ?? '';
+        final userData = authEx?.data?['user'];
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => RegistrationRejectedScreen(
+              referenceNumber: ref,
+              username: un,
+              rejectionReason: reason,
+              userData: userData is Map<String, dynamic> ? userData : null,
+            ),
+          ),
+        );
+      } else if (authEx?.code == 'account_suspended') {
+        _showSuspendedDialog();
+      } else {
+        setState(() { _errorMessage = state.lastError ?? state.s.get('invalid_credentials'); });
+      }
     }
     if (mounted) setState(() => _isSubmitting = false);
+  }
+
+  void _showSuspendedDialog() {
+    final s = AppScope.of(context).s;
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text(s.get('account_suspended_title')),
+        content: Text(
+          s.get('account_suspended_desc'),
+          style: const TextStyle(height: 1.4),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(s.get('close')),
+          ),
+        ],
+      ),
+    );
   }
 
   void _showForgotPasswordDialog() {
@@ -269,9 +326,34 @@ class _LoginScreenState extends State<LoginScreen> {
                   child: Text(
                     s.get('forgot_password'),
                     style: const TextStyle(
+                      color: AppColors.textSecondary,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 8),
+
+              // Don't have an account? Register
+              Center(
+                child: TextButton.icon(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const RegistrationScreen(),
+                      ),
+                    );
+                  },
+                  icon: const Icon(Icons.person_add_outlined, size: 18, color: AppColors.primaryGreen),
+                  label: Text(
+                    s.get('dont_have_account'),
+                    style: const TextStyle(
                       color: AppColors.primaryGreen,
                       fontSize: 14,
-                      fontWeight: FontWeight.w500,
+                      fontWeight: FontWeight.bold,
                     ),
                   ),
                 ),

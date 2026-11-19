@@ -182,9 +182,69 @@ class MobileCompatibilityTests(SimpleTestCase):
         self.assertEqual(payload["ticketId"], "AD-2026-0423")
         self.assertEqual(payload["type"], "submitted")
         self.assertFalse(payload["isRead"])
+<<<<<<< HEAD
         assigned = mobile_notification({
             "_id": "notification-2", "kind": "ticket_assigned",
             "message": "A ticket was assigned to you.", "ticket_number": "AF-2026-0007",
             "created_at": created, "read": False,
         })
         self.assertEqual(assigned["type"], "assigned")
+=======
+
+    def test_phone_normalization_accepts_ethiopian_formats(self):
+        from .serializers import normalize_ethiopian_phone
+        cases = [
+            ("0911223344", "+251911223344"),
+            ("0711223344", "+251711223344"),
+            ("+251911223344", "+251911223344"),
+            ("251911223344", "+251911223344"),
+            ("0911-22-33-44", "+251911223344"),
+            ("+251 (911) 223344", "+251911223344"),
+        ]
+        for raw, expected in cases:
+            with self.subTest(raw=raw):
+                self.assertEqual(normalize_ethiopian_phone(raw), expected)
+
+    def test_phone_normalization_rejects_invalid_numbers(self):
+        from rest_framework.exceptions import ValidationError
+        from .serializers import normalize_ethiopian_phone
+        invalids = ["0811223344", "12345", "091122334", "091122334455", "abcdefghij"]
+        for raw in invalids:
+            with self.subTest(raw=raw):
+                with self.assertRaises(ValidationError):
+                    normalize_ethiopian_phone(raw)
+
+    def test_registration_serializer_validation(self):
+        from .serializers import MobileRegistrationSerializer
+        # Valid employee
+        valid_emp = {
+            "fullName": "Selam Worku",
+            "employeeId": "EMP-1001",
+            "username": "selam.w",
+            "phone": "0911223344",
+            "department": "Finance",
+            "role": "employee",
+            "password": "Password123",
+        }
+        norm = normalize_payload(valid_emp, {
+            "full_name": "fullName",
+            "employee_id": "employeeId",
+            "work_unit": "workUnit",
+            "office_location": "officeLocation",
+        })
+        s = MobileRegistrationSerializer(data=norm)
+        self.assertTrue(s.is_valid(), s.errors)
+
+        # Invalid username (uppercase or invalid characters)
+        bad_user = {**norm, "username": "Selam_Worku!"}
+        s_bad = MobileRegistrationSerializer(data=bad_user)
+        self.assertFalse(s_bad.is_valid())
+        self.assertIn("username", s_bad.errors)
+
+        # Technician without specialties fails
+        tech_no_specs = {**norm, "role": "technician", "specialties": []}
+        s_tech = MobileRegistrationSerializer(data=tech_no_specs)
+        self.assertFalse(s_tech.is_valid())
+        self.assertIn("specialties", s_tech.errors)
+
+>>>>>>> feature/e2e-registration-approval

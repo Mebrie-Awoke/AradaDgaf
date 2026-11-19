@@ -28,7 +28,8 @@ from .serializers import (
     AttachmentMetadataSerializer, CommentSerializer, LoginSerializer,
     NamedResourceSerializer, ProvisionUserSerializer, RegistrationSerializer,
     TicketCreateSerializer, TicketUpdateSerializer, UserUpdateSerializer,
-    NamedResourceUpdateSerializer,
+    NamedResourceUpdateSerializer, RegistrationApprovalSerializer,
+    RegistrationRejectionSerializer,
 )
 from .utils import json_safe, public_user
 
@@ -186,9 +187,37 @@ class LoginView(APIView):
         serializer.is_valid(raise_exception=True)
         database = get_database()
         values = serializer.validated_data
-        user = database.users.find_one({"email": values["email"]})
-        if not user or not user.get("is_active", True) or not check_password(values["password"], user["password"]):
+        login_id = (values.get("email") or values.get("username") or "").strip().lower()
+        user = database.users.find_one({"$or": [{"email": login_id}, {"username": login_id}]})
+        if not user or not user.get("password") or not check_password(values["password"], user["password"]):
             raise AuthenticationFailed("Invalid email or password.")
+
+        account_status = user.get("status")
+        if not account_status:
+            account_status = "active" if user.get("is_active", True) else "suspended"
+
+        if account_status == "pending":
+            return Response({
+                "success": False,
+                "error": "account_pending",
+                "code": "account_pending",
+                "message": "Account registration is pending administrator approval.",
+            }, status=status.HTTP_403_FORBIDDEN)
+        if account_status == "rejected":
+            return Response({
+                "success": False,
+                "error": "account_rejected",
+                "code": "account_rejected",
+                "message": f"Account was not approved: {user.get('rejection_reason', '')}",
+                "reason": user.get("rejection_reason", ""),
+            }, status=status.HTTP_403_FORBIDDEN)
+        if account_status == "suspended" or not user.get("is_active", True):
+            return Response({
+                "success": False,
+                "error": "account_suspended",
+                "code": "account_suspended",
+                "message": "This account is suspended.",
+            }, status=status.HTTP_403_FORBIDDEN)
         token = secrets.token_urlsafe(40)
         expires_at = now() + timedelta(seconds=settings.ACCESS_TOKEN_TTL_SECONDS)
         database.access_tokens.insert_one({
@@ -208,7 +237,11 @@ class UsersView(APIView):
     permission_classes = [IsAdmin]
 
     def get(self, request):
-        return paginate_mongo(get_database().users, request, projection={"password": 0}, transform=public_user)
+        query = {}
+        role = request.query_params.get("role")
+        if role:
+            query["role"] = role
+        return paginate_mongo(get_database().users, request, query=query, projection={"password": 0}, transform=public_user)
 
     def post(self, request):
         serializer = ProvisionUserSerializer(data=request.data)
@@ -353,6 +386,122 @@ class UserDetailView(APIView):
         return success({"message": "User deleted. Related ticket history was preserved."})
 
 
+class AdminRegistrationsView(APIView):
+    permission_classes = [IsAdmin]
+
+    def get(self, request):
+        database = get_database()
+        query = {}
+        status_param = request.query_params.get("status")
+        if status_param:
+            query["status"] = status_param
+        role_param = request.query_params.get("role")
+        if role_param:
+            backend_role = "support" if role_param == "technician" else role_param
+            query["role"] = backend_role
+        search = request.query_params.get("q", "").strip()
+        if search:
+            safe = re.escape(search[:100])
+            query["$or"] = [
+                {"name": {"$regex": safe, "$options": "i"}},
+                {"username": {"$regex": safe, "$options": "i"}},
+                {"employee_id": {"$regex": safe, "$options": "i"}},
+                {"registration_reference": {"$regex": safe, "$options": "i"}},
+                {"email": {"$regex": safe, "$options": "i"}},
+            ]
+        return paginate_mongo(database.users, request, query=query, sort=[("created_at", DESCENDING)], transform=public_user)
+
+
+class AdminRegistrationApproveView(APIView):
+    permission_classes = [IsAdmin]
+
+    def post(self, request, user_id):
+        database = get_database()
+        target_id = parse_object_id(user_id, "user_id")
+        target = database.users.find_one({"_id": target_id})
+        if not target:
+            raise NotFound("Registration not found.")
+
+        serializer = RegistrationApprovalSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        updates = {
+            "status": "active",
+            "is_active": True,
+            "approved_at": now(),
+            "approved_by": ObjectId(request.user.id),
+            "updated_at": now(),
+        }
+        if "specialties" in serializer.validated_data and serializer.validated_data["specialties"]:
+            updates["specialties"] = serializer.validated_data["specialties"]
+        if "qualification_note" in serializer.validated_data and serializer.validated_data["qualification_note"]:
+            updates["qualification_note"] = serializer.validated_data["qualification_note"]
+
+        updated = database.users.find_one_and_update(
+            {"_id": target_id},
+            {"$set": updates},
+            return_document=ReturnDocument.AFTER,
+        )
+
+        database.admin_audit.insert_one({
+            "actor_id": ObjectId(request.user.id),
+            "actor_email": request.user.email,
+            "action": "registration_approved",
+            "target_user_id": target_id,
+            "target_username": target.get("username"),
+            "role": target.get("role"),
+            "changes": {"status": {"from": target.get("status"), "to": "active"}},
+            "created_at": now(),
+        })
+
+        return success({"user": public_user(updated)})
+
+
+class AdminRegistrationRejectView(APIView):
+    permission_classes = [IsAdmin]
+
+    def post(self, request, user_id):
+        database = get_database()
+        target_id = parse_object_id(user_id, "user_id")
+        target = database.users.find_one({"_id": target_id})
+        if not target:
+            raise NotFound("Registration not found.")
+
+        serializer = RegistrationRejectionSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        reason = serializer.validated_data["reason"]
+
+        updates = {
+            "status": "rejected",
+            "is_active": False,
+            "rejection_reason": reason,
+            "rejected_at": now(),
+            "rejected_by": ObjectId(request.user.id),
+            "updated_at": now(),
+        }
+
+        updated = database.users.find_one_and_update(
+            {"_id": target_id},
+            {"$set": updates},
+            return_document=ReturnDocument.AFTER,
+        )
+
+        database.admin_audit.insert_one({
+            "actor_id": ObjectId(request.user.id),
+            "actor_email": request.user.email,
+            "action": "registration_rejected",
+            "target_user_id": target_id,
+            "target_username": target.get("username"),
+            "role": target.get("role"),
+            "reason": reason,
+            "changes": {"status": {"from": target.get("status"), "to": "rejected"}},
+            "created_at": now(),
+        })
+
+        return success({"user": public_user(updated)})
+
+
+
 class TicketListCreateView(APIView):
     def get(self, request):
         database = get_database()
@@ -427,7 +576,17 @@ class TicketDetailView(APIView):
         serializer = TicketUpdateSerializer(data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
         updates = serializer.validated_data.copy()
-        privileged_fields = {"priority", "assigned_to", "status", "category_id", "department_id"}
+        note_text = updates.pop("note", None) or updates.pop("notes", None)
+        if note_text and note_text.strip():
+            database.ticket_comments.insert_one({
+                "ticket_id": ticket["_id"],
+                "author_id": ObjectId(request.user.id),
+                "author_name": getattr(request.user, "name", "Administrator"),
+                "body": note_text.strip(),
+                "internal_only": True,
+                "created_at": now(),
+            })
+        privileged_fields = {"priority", "assigned_to", "status", "category_id", "department_id", "due_date"}
         if request.user.role == "employee":
             if set(updates) - {"status"}:
                 raise PermissionDenied("Employees may only close a resolved ticket.")

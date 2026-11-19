@@ -1,20 +1,25 @@
 from django.urls import path
 from .mobile_compat import (
-    MobileLoginView, MobileTicketListCreateView, MobileTicketDetailView,
+    MobileLoginView, MobileRegisterView, MobileRegistrationStatusView,
+    MobileTicketListCreateView, MobileTicketDetailView,
     MobileStartWorkView, MobileRecordWorkView, MobileRateTicketView,
     MobileNotificationsView, MobileNotificationReadView, MobileLogoutView,
 )
 from .readiness import ReadinessCheckView
 from .views import (
-    AdminAuditView, DashboardView, HealthCheckView, LoginView, LogoutView, NamedResourceDetailView, NamedResourcesView,
-    NotificationDetailView, NotificationsView, RegistrationView,
-    TicketAttachmentDownloadView, TicketAttachmentsView, TicketAuditView, TicketCommentsView,
+    AdminAuditView, AdminRegistrationApproveView, AdminRegistrationRejectView,
+    AdminRegistrationsView, DashboardView, HealthCheckView, LoginView, LogoutView,
+    NamedResourceDetailView, NamedResourcesView, NotificationDetailView,
+    NotificationsView, RegistrationView, TicketAttachmentDownloadView,
+    TicketAttachmentsView, TicketAuditView, TicketCommentsView,
     TicketDetailView, TicketListCreateView, UserDetailView, UsersView,
 )
 
 urlpatterns = [
     # Compatibility endpoints matching the current Flutter ticket/user models.
     path("mobile/auth/login/", MobileLoginView.as_view(), name="mobile-login"),
+    path("mobile/auth/register/", MobileRegisterView.as_view(), name="mobile-register"),
+    path("mobile/auth/registration-status/", MobileRegistrationStatusView.as_view(), name="mobile-registration-status"),
     path("mobile/auth/logout/", MobileLogoutView.as_view(), name="mobile-logout"),
     path("mobile/tickets/", MobileTicketListCreateView.as_view(), name="mobile-tickets"),
     path("mobile/tickets/<str:ticket_number>/", MobileTicketDetailView.as_view(), name="mobile-ticket-detail"),
@@ -28,6 +33,9 @@ urlpatterns = [
     path("v1/auth/register/", RegistrationView.as_view(), name="register"),
     path("v1/auth/login/", LoginView.as_view(), name="login"),
     path("v1/auth/logout/", LogoutView.as_view(), name="logout"),
+    path("v1/registrations/", AdminRegistrationsView.as_view(), name="admin-registrations"),
+    path("v1/registrations/<str:user_id>/approve/", AdminRegistrationApproveView.as_view(), name="admin-registration-approve"),
+    path("v1/registrations/<str:user_id>/reject/", AdminRegistrationRejectView.as_view(), name="admin-registration-reject"),
     path("v1/users/", UsersView.as_view(), name="users"),
     path("v1/users/<str:user_id>/", UserDetailView.as_view(), name="user-detail"),
     path("v1/admin/audit/", AdminAuditView.as_view(), name="admin-audit"),

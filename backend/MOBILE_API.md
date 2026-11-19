@@ -27,13 +27,91 @@ Accepts a username or email, password, and optional selected role.
 }
 ```
 
-Roles exposed to the app are `employee` and `technician`; backend `support` and `admin` accounts are represented as `technician`. The response contains `access_token`, `token_type`, `expires_at`, and a user object using the Flutter fields `username`, `fullName`, `role`, `department`, `officeLocation`, and `phoneNumber`.
+Roles exposed to the app are `employee` and `technician`; backend `support` and `admin` accounts are represented as `technician`.
 
-The endpoint does not accept the Flutter demo credentials. Accounts must exist in the backend.
+**Successful response (HTTP 200):**
+The response contains `access_token`, `token_type`, `expires_at`, and a user object using the Flutter fields `username`, `fullName`, `role`, `department`, `officeLocation`, and `phoneNumber`.
+
+**Account Status Responses (HTTP 403 Forbidden):**
+If credentials match but the account is not active, the endpoint returns a machine-readable error code:
+- `account_pending`: Registration has been submitted and is awaiting administrator approval. Includes `referenceNumber` and `username`.
+- `account_rejected`: Registration was rejected by the administrator. Includes `rejectionReason`, `referenceNumber`, and `user` object for resubmission.
+- `account_suspended`: Account has been deactivated or suspended by an administrator.
+
+**Invalid Credentials Response (HTTP 401 Unauthorized):**
+Returned when the username/email does not exist or the password does not match.
+
+### `POST auth/register/`
+
+Public registration endpoint for employees and technicians. Accounts are created in `pending` status (`is_active: false`) awaiting administrative review.
+
+```json
+{
+  "role": "employee",
+  "fullName": "Abebe Tessema",
+  "employeeId": "EMP-9021",
+  "username": "abebe.t",
+  "password": "Password123!",
+  "confirmPassword": "Password123!",
+  "phone": "0911223344",
+  "email": "abebe.tessema@arada.gov.et",
+  "department": "Finance Department",
+  "workUnit": "Budget Division",
+  "officeLocation": "Building B, Room 104"
+}
+```
+
+For technicians (`role: "technician"`):
+- `specialties`: array containing at least one of `["Network", "Hardware", "Software", "Printers & copiers", "Anti-virus & security"]`.
+- `qualificationNote`: optional note regarding certifications or skills.
+
+The phone number is normalized server-side to `+251XXXXXXXXX`. Server returns reference number `REG-2026-####`:
+
+```json
+{
+  "success": true,
+  "data": {
+    "referenceNumber": "REG-2026-0004",
+    "username": "abebe.t",
+    "fullName": "Abebe Tessema",
+    "role": "employee",
+    "status": "pending",
+    "createdAt": "2026-11-19T17:00:00Z"
+  }
+}
+```
+
+### `GET auth/registration-status/?ref=REG-2026-####&username=abebe.t`
+
+Public status check endpoint for registrants to inspect their application status without exposing private records:
+
+```json
+{
+  "success": true,
+  "data": {
+    "referenceNumber": "REG-2026-0004",
+    "username": "abebe.t",
+    "fullName": "Abebe Tessema",
+    "role": "employee",
+    "status": "pending",
+    "rejectionReason": "",
+    "createdAt": "2026-11-19T17:00:00Z"
+  }
+}
+```
 
 ### `POST auth/logout/`
 
 Revokes the current bearer token. Requires the authenticated Authorization header.
+
+## Administrator Endpoints (`/api/v1/`)
+
+Authenticated administrator endpoints (`Authorization: Bearer <token>`):
+
+- `GET /api/v1/registrations/?status=pending&role=employee` — list pending registrations.
+- `POST /api/v1/registrations/{id}/approve/` — approve registration, activate account, and optionally assign technician specialties (`{"specialties": [...]}`).
+- `POST /api/v1/registrations/{id}/reject/` — reject registration with a required reason (`{"reason": "Invalid employee ID..."}`).
+
 
 ## Tickets
 

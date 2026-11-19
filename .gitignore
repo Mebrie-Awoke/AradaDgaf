@@ -21,6 +21,20 @@ media/
 .env.*
 !.env.example
 
+# Node / Web
+node_modules/
+dist/
+
+# Flutter / Mobile
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+build/
+
+# Packaging & Delivery
+delivery/
+*.zip
+
 # Editors and OS
 .vscode/
 .idea/
