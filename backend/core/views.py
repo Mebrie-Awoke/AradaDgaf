@@ -378,6 +378,14 @@ class TicketDetailView(APIView):
                 else:
                     updates["assigned_to"] = None
                     updates["assigned_technician"] = None
+            if "assigned_to" in updates:
+                assignment_changed = str(ticket.get("assigned_to") or "") != str(updates.get("assigned_to") or "")
+                if assignment_changed and ticket["status"] in {"resolved", "closed"}:
+                    raise ValidationError({"assigned_to": "Completed tickets cannot be reassigned."})
+                if assignment_changed and ticket["status"] in {"submitted", "assigned", "in_progress"}:
+                    updates["status"] = "assigned" if updates.get("assigned_to") else "submitted"
+                    updates["mobile_status"] = "submitted"
+                    updates["started_at"] = None
             for field, collection in (("category_id", "categories"), ("department_id", "departments")):
                 if field in updates:
                     updates[field] = require_reference(database, collection, updates[field], field)

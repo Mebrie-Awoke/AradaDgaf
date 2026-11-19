@@ -207,7 +207,13 @@ def mobile_notification(document):
         "rating_requested": "ratingRequest",
     }.get(kind, "resolved" if "resolved" in kind else "assigned")
     ticket_id = document.get("ticket_number") or str(document.get("ticket_id", ""))
-    title = document.get("title") or f"Ticket {ticket_id} update"
+    default_titles = {
+        "ticket_assigned": f"New job assigned: {ticket_id}",
+        "ticket_reassigned": f"Job reassigned: {ticket_id}",
+        "ticket_started": f"Work started: {ticket_id}",
+        "ticket_resolved": f"Work completed: {ticket_id}",
+    }
+    title = document.get("title") or default_titles.get(kind, f"Ticket {ticket_id} update")
     return {
         "id": str(document.get("_id", "")),
         "title": title,
