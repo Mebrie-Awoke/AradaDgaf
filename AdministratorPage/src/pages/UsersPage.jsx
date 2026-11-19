@@ -1,4 +1,4 @@
-import { Search, UserPlus, Users, X, Shield, UserCog, RefreshCw } from "lucide-react";
+import { Search, UserPlus, Users, X, Shield, UserCog, RefreshCw, Pencil, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { apiRequest, unwrap } from "../api/client";
 import { useAuth } from "../context/AuthContext";
@@ -9,11 +9,12 @@ const blank = {
 };
 
 export default function UsersPage() {
-  const { token } = useAuth();
+  const { token, user: currentUser } = useAuth();
   const [users, setUsers] = useState([]);
   const [departments, setDepartments] = useState([]);
   const [query, setQuery] = useState("");
   const [modal, setModal] = useState(false);
+  const [editingUser, setEditingUser] = useState(null);
   const [form, setForm] = useState(blank);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -45,10 +46,17 @@ export default function UsersPage() {
     setNotice("");
     setSaving(true);
     try {
-      await apiRequest("/v1/users/", { token, method: "POST", body: form });
+      if (editingUser) {
+        const { password, email, ...updates } = form;
+        await apiRequest("/v1/users/" + editingUser.id + "/", { token, method: "PATCH", body: updates });
+        setNotice("Account details updated.");
+      } else {
+        await apiRequest("/v1/users/", { token, method: "POST", body: form });
+        setNotice("Account created. Share the initial password securely with the account owner.");
+      }
       setModal(false);
+      setEditingUser(null);
       setForm(blank);
-      setNotice("Account created. Share the initial password securely with the account owner.");
       await load();
     } catch (err) {
       setError(err.message || "Unable to create this account.");
@@ -68,6 +76,30 @@ export default function UsersPage() {
     }
   }
 
+  function edit(user) {
+    setEditingUser(user);
+    setForm({
+      ...blank, name: user.name || "", email: user.email || "",
+      username: user.username || "", role: user.role || "support",
+      department_id: user.department_id || "", phone_number: user.phone_number || "",
+      office_location: user.office_location || "",
+    });
+    setError("");
+    setModal(true);
+  }
+
+  async function remove(user) {
+    if (!window.confirm("Delete " + (user.name || user.email) + "? Their login and notifications will be removed; ticket history will be preserved.")) return;
+    setError("");
+    try {
+      await apiRequest("/v1/users/" + user.id + "/", { token, method: "DELETE" });
+      setNotice("Account deleted. Existing ticket history was preserved.");
+      await load();
+    } catch (err) {
+      setError(err.message || "Unable to delete this account.");
+    }
+  }
+
   const personnel = users.filter((user) => ["admin", "support"].includes(user.role));
   const filtered = personnel.filter((user) =>
     [user.name, user.email, user.username, user.role]
@@ -80,7 +112,7 @@ export default function UsersPage() {
         <p>Manage administrator accounts and registered IT support personnel.</p></div>
       <div className="heading-actions">
         <button className="secondary-btn" onClick={load} disabled={busy}><RefreshCw size={16}/> Refresh</button>
-        <button className="primary-btn" onClick={() => { setForm(blank); setModal(true); setError(""); }}>
+        <button className="primary-btn" onClick={() => { setEditingUser(null); setForm(blank); setModal(true); setError(""); }}>
           <UserPlus size={17}/> Add account
         </button>
       </div>
@@ -106,7 +138,7 @@ export default function UsersPage() {
           {personnel.length === 0 ? "No IT personnel are registered yet. The administrator account will appear here." : "No personnel match your search."}
         </div>
         : <div className="table-wrap"><table>
-          <thead><tr><th>Person</th><th>Role</th><th>Department</th><th>Contact</th><th>Access</th></tr></thead>
+          <thead><tr><th>Person</th><th>Role</th><th>Department</th><th>Contact</th><th>Access</th><th>Actions</th></tr></thead>
           <tbody>{filtered.map((user) => <tr key={user.id}>
             <td><div className="person-cell">
               <div className="avatar small">{(user.name || "U").slice(0, 1).toUpperCase()}</div>
@@ -123,20 +155,27 @@ export default function UsersPage() {
               disabled={user.id === undefined || user.id === null}>
               <option value="true">Active</option><option value="false">Inactive</option>
             </select></td>
+            <td><div className="heading-actions">
+              <button type="button" className="secondary-btn" onClick={() => edit(user)}><Pencil size={14}/> Edit</button>
+              <button type="button" className="secondary-btn" onClick={() => remove(user)}
+                disabled={user.id === currentUser?.id} aria-label={"Delete " + (user.name || user.email)}>
+                <Trash2 size={14}/> Delete
+              </button>
+            </div></td>
           </tr>)}</tbody>
         </table></div>}
     </section>
 
     {modal && <div className="modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && setModal(false)}>
       <form className="modal-card" onSubmit={create}>
-        <div className="modal-heading"><div><div className="eyebrow">NEW ACCOUNT</div><h2>Provision a user</h2></div>
+        <div className="modal-heading"><div><div className="eyebrow">{editingUser ? "EDIT ACCOUNT" : "NEW ACCOUNT"}</div><h2>{editingUser ? "Update account" : "Provision a user"}</h2></div>
           <button type="button" className="icon-btn" onClick={() => setModal(false)} aria-label="Close form"><X size={19}/></button>
         </div>
         <div className="form-grid">
           <div className="form-field full"><label htmlFor="user-name">Full name</label><input id="user-name" required value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })}/></div>
-          <div className="form-field"><label htmlFor="user-email">Email</label><input id="user-email" type="email" required value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })}/></div>
+          <div className="form-field"><label htmlFor="user-email">Email</label><input id="user-email" type="email" required disabled={Boolean(editingUser)} value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })}/></div>
           <div className="form-field"><label htmlFor="user-username">Username</label><input id="user-username" required minLength="3" value={form.username} onChange={(event) => setForm({ ...form, username: event.target.value })}/></div>
-          <div className="form-field"><label htmlFor="user-password">Initial password (12+ characters)</label><input id="user-password" type="password" required minLength="12" autoComplete="new-password" value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })}/></div>
+          {!editingUser && <div className="form-field"><label htmlFor="user-password">Initial password (12+ characters)</label><input id="user-password" type="password" required minLength="12" autoComplete="new-password" value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })}/></div>}
           <div className="form-field"><label htmlFor="user-role">Role</label><select id="user-role" value={form.role} onChange={(event) => setForm({ ...form, role: event.target.value })}>
             <option value="support">IT Support</option><option value="admin">Administrator</option>
           </select></div>
@@ -147,8 +186,8 @@ export default function UsersPage() {
           <div className="form-field full"><label htmlFor="user-office">Office location</label><input id="user-office" value={form.office_location} onChange={(event) => setForm({ ...form, office_location: event.target.value })}/></div>
         </div>
         <div className="modal-actions">
-          <button type="button" className="secondary-btn" onClick={() => setModal(false)}>Cancel</button>
-          <button className="primary-btn" disabled={saving}>{saving ? "Creating…" : "Create account"}</button>
+          <button type="button" className="secondary-btn" onClick={() => { setModal(false); setEditingUser(null); }}>Cancel</button>
+          <button className="primary-btn" disabled={saving}>{saving ? "Saving…" : editingUser ? "Save changes" : "Create account"}</button>
         </div>
       </form>
     </div>}
