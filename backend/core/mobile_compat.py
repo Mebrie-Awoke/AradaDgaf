@@ -10,7 +10,7 @@ from datetime import datetime, timedelta, timezone
 
 from bson import ObjectId
 from django.conf import settings
-from django.contrib.auth.hashers import check_password
+from django.contrib.auth.hashers import check_password, make_password
 from pymongo import ReturnDocument
 from rest_framework import serializers, status
 from rest_framework.exceptions import AuthenticationFailed, NotFound, PermissionDenied, ValidationError
@@ -19,7 +19,8 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .db import get_database
-from .utils import json_safe
+from .serializers import MobileRegistrationSerializer, TECHNICIAN_SPECIALTIES
+from .utils import json_safe, public_user
 
 
 CATEGORIES = {"maintenance", "antivirus", "software", "technical", "other"}
@@ -267,11 +268,53 @@ class MobileLoginView(APIView):
             user_doc = matches[0] if len(matches) == 1 else None
         if (
             not user_doc
-            or not user_doc.get("is_active", True)
             or not user_doc.get("password")
             or not check_password(values["password"], user_doc["password"])
         ):
             raise AuthenticationFailed("Invalid username or password.")
+
+        account_status = user_doc.get("status")
+        if not account_status:
+            account_status = "active" if user_doc.get("is_active", True) else "suspended"
+
+        if account_status == "pending":
+            return Response({
+                "success": False,
+                "error": "account_pending",
+                "code": "account_pending",
+                "message": "Your account registration is pending administrator approval.",
+                "data": {
+                    "status": "pending",
+                    "referenceNumber": user_doc.get("registration_reference", ""),
+                    "username": user_doc.get("username") or user_doc["email"].split("@")[0],
+                },
+            }, status=status.HTTP_403_FORBIDDEN)
+
+        if account_status == "rejected":
+            reason = user_doc.get("rejection_reason", "Registration not approved by administrator.")
+            return Response({
+                "success": False,
+                "error": "account_rejected",
+                "code": "account_rejected",
+                "message": f"Your account registration was not approved: {reason}",
+                "reason": reason,
+                "data": {
+                    "status": "rejected",
+                    "rejectionReason": reason,
+                    "referenceNumber": user_doc.get("registration_reference", ""),
+                    "user": public_user(user_doc),
+                },
+            }, status=status.HTTP_403_FORBIDDEN)
+
+        if account_status == "suspended" or not user_doc.get("is_active", True):
+            return Response({
+                "success": False,
+                "error": "account_suspended",
+                "code": "account_suspended",
+                "message": "This account is suspended. Please contact the administrator.",
+                "data": {"status": "suspended"},
+            }, status=status.HTTP_403_FORBIDDEN)
+
         if user_doc.get("role") not in {"employee", "support", "admin"}:
             raise AuthenticationFailed("This account does not have a mobile application role.")
         expected_role = "employee" if user_doc["role"] == "employee" else "technician"
@@ -307,6 +350,165 @@ class MobileLogoutView(APIView):
     def post(self, request):
         get_database().access_tokens.delete_one({"_id": request.auth["_id"]})
         return ok({"message": "Logged out."})
+
+
+class MobileRegisterView(APIView):
+    permission_classes = [AllowAny]
+    authentication_classes = []
+
+    def post(self, request):
+        data = normalize_payload(request.data, {
+            "full_name": "fullName",
+            "employee_id": "employeeId",
+            "confirm_password": "confirmPassword",
+            "work_unit": "workUnit",
+            "office_location": "officeLocation",
+            "qualification_note": "qualificationNote",
+        })
+        serializer = MobileRegistrationSerializer(data=data)
+        serializer.is_valid(raise_exception=True)
+        values = serializer.validated_data
+        database = get_database()
+
+        username = values["username"]
+        existing_user = database.users.find_one({"username": username})
+        if existing_user and existing_user.get("status") != "rejected":
+            raise ValidationError({"username": "This username is already taken."})
+
+        employee_id = values["employee_id"]
+        existing_emp = database.users.find_one({"employee_id": employee_id})
+        if existing_emp and existing_emp.get("status") != "rejected":
+            raise ValidationError({"employee_id": "This employee ID is already registered."})
+
+        phone = values["phone"]
+        existing_phone = database.users.find_one({"phone_number": phone})
+        if existing_phone and existing_phone.get("status") != "rejected":
+            raise ValidationError({"phone": "This phone number is already registered."})
+
+        email = values.get("email")
+        if email:
+            existing_email = database.users.find_one({"email": email})
+            if existing_email and existing_email.get("status") != "rejected":
+                raise ValidationError({"email": "This email address is already in use."})
+        else:
+            email = f"{username}@arada.gov.et"
+
+        dept_input = values["department"].strip()
+        dept_doc = None
+        if ObjectId.is_valid(dept_input):
+            dept_doc = database.departments.find_one({"_id": ObjectId(dept_input)})
+        if not dept_doc:
+            dept_doc = database.departments.find_one({"name": {"$regex": f"^{re.escape(dept_input)}$", "$options": "i"}})
+        if not dept_doc:
+            dept_doc = database.departments.find_one({"name": {"$regex": re.escape(dept_input), "$options": "i"}})
+
+        dept_id = dept_doc["_id"] if dept_doc else None
+        resolved_dept_name = dept_doc["name"] if dept_doc else dept_input
+
+        created = utcnow()
+        counter = database.counters.find_one_and_update(
+            {"_id": f"registration:{created.year}"},
+            {"$inc": {"sequence": 1}},
+            upsert=True,
+            return_document=ReturnDocument.AFTER,
+        )
+        ref_number = f"REG-{created.year}-{counter['sequence']:04d}"
+
+        role = "employee" if values["role"] == "employee" else "support"
+        user_record = {
+            "name": values["full_name"],
+            "username": username,
+            "employee_id": employee_id,
+            "email": email,
+            "phone_number": phone,
+            "department_id": dept_id,
+            "department": resolved_dept_name,
+            "work_unit": values.get("work_unit", ""),
+            "office_location": values.get("office_location", ""),
+            "role": role,
+            "password": make_password(values["password"]),
+            "status": "pending",
+            "is_active": False,
+            "registration_reference": ref_number,
+            "specialties": values.get("specialties") or [],
+            "qualification_note": values.get("qualification_note", ""),
+            "rejection_reason": "",
+            "created_at": created,
+            "updated_at": created,
+        }
+
+        # Handle resubmission of rejected accounts
+        target_id = None
+        if existing_user and existing_user.get("status") == "rejected":
+            target_id = existing_user["_id"]
+        elif existing_emp and existing_emp.get("status") == "rejected":
+            target_id = existing_emp["_id"]
+
+        if target_id:
+            database.users.update_one({"_id": target_id}, {"$set": user_record})
+            inserted_id = target_id
+        else:
+            inserted = database.users.insert_one(user_record)
+            inserted_id = inserted.inserted_id
+
+        database.admin_audit.insert_one({
+            "action": "registration_submitted",
+            "actor_name": values["full_name"],
+            "actor_username": username,
+            "target_user_id": inserted_id,
+            "target_username": username,
+            "reference_number": ref_number,
+            "role": values["role"],
+            "created_at": created,
+        })
+
+        return ok({
+            "referenceNumber": ref_number,
+            "username": username,
+            "fullName": values["full_name"],
+            "role": values["role"],
+            "status": "pending",
+            "createdAt": created,
+        }, http_status=status.HTTP_201_CREATED)
+
+
+class MobileRegistrationStatusView(APIView):
+    permission_classes = [AllowAny]
+    authentication_classes = []
+
+    def get(self, request):
+        ref = (request.query_params.get("ref") or request.query_params.get("reference_number") or "").strip()
+        username = (request.query_params.get("username") or "").strip().lower()
+        if not ref and not username:
+            raise ValidationError({"reference_number": "Reference number or username is required."})
+
+        query = {}
+        if ref:
+            query["registration_reference"] = ref
+        if username:
+            query["$or"] = [{"username": username}, {"email": username}]
+
+        database = get_database()
+        user = database.users.find_one(query)
+        if not user:
+            raise NotFound("Registration record not found.")
+
+        current_status = user.get("status")
+        if not current_status:
+            current_status = "active" if user.get("is_active", True) else "suspended"
+
+        return ok({
+            "referenceNumber": user.get("registration_reference", ""),
+            "username": user.get("username", ""),
+            "fullName": user.get("name", ""),
+            "role": "employee" if user.get("role") == "employee" else "technician",
+            "status": current_status,
+            "rejectionReason": user.get("rejection_reason", ""),
+            "createdAt": user.get("created_at"),
+            "specialties": user.get("specialties", []),
+            "department": user.get("department", ""),
+        })
+
 
 
 class MobileTicketListCreateView(APIView):

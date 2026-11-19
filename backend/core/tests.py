@@ -452,3 +452,165 @@ class ApiTests(TestCase):
                 })
 
                 self.assertFalse(serializer.is_valid())
+
+    @patch("core.mobile_compat.get_database")
+    def test_mobile_registration_creates_pending_account_with_reference(self, get_database):
+        database = MagicMock()
+        database.users.find_one.return_value = None
+        database.departments.find_one.return_value = {"_id": ObjectId(), "name": "Finance Department"}
+        database.counters.find_one_and_update.return_value = {"sequence": 42}
+        new_id = ObjectId()
+        database.users.insert_one.return_value.inserted_id = new_id
+        get_database.return_value = database
+
+        response = self.client.post("/api/mobile/auth/register/", {
+            "fullName": "Abebe Tessema",
+            "employeeId": "EMP-9021",
+            "username": "abebe.t",
+            "password": "Password123!",
+            "phone": "0911223344",
+            "department": "Finance Department",
+            "role": "employee",
+        }, format="json")
+
+        self.assertEqual(response.status_code, 201)
+        data = response.json()["data"]
+        self.assertEqual(data["status"], "pending")
+        self.assertTrue(data["referenceNumber"].startswith("REG-"))
+        self.assertEqual(data["referenceNumber"], f"REG-{datetime.now(timezone.utc).year}-0042")
+        stored = database.users.insert_one.call_args.args[0]
+        self.assertEqual(stored["status"], "pending")
+        self.assertFalse(stored["is_active"])
+        self.assertEqual(stored["phone_number"], "+251911223344")
+        self.assertTrue(check_password("Password123!", stored["password"]))
+
+    @patch("core.mobile_compat.get_database")
+    def test_mobile_login_returns_machine_readable_error_for_non_active_accounts(self, get_database):
+        database = MagicMock()
+        get_database.return_value = database
+        hashed = make_password("Secret123!")
+
+        # 1. Pending account
+        database.users.find_one.return_value = {
+            "_id": ObjectId(),
+            "username": "pending_user",
+            "password": hashed,
+            "status": "pending",
+            "is_active": False,
+            "role": "employee",
+            "registration_reference": "REG-2026-0001",
+        }
+        res_pending = self.client.post("/api/mobile/auth/login/", {
+            "username": "pending_user",
+            "password": "Secret123!",
+        }, format="json")
+        self.assertEqual(res_pending.status_code, 403)
+        self.assertEqual(res_pending.json()["error"], "account_pending")
+        self.assertNotIn("access_token", res_pending.json())
+
+        # 2. Rejected account
+        database.users.find_one.return_value = {
+            "_id": ObjectId(),
+            "username": "rejected_user",
+            "password": hashed,
+            "status": "rejected",
+            "is_active": False,
+            "role": "employee",
+            "rejection_reason": "Employee ID does not match records.",
+            "registration_reference": "REG-2026-0002",
+        }
+        res_rejected = self.client.post("/api/mobile/auth/login/", {
+            "username": "rejected_user",
+            "password": "Secret123!",
+        }, format="json")
+        self.assertEqual(res_rejected.status_code, 403)
+        self.assertEqual(res_rejected.json()["error"], "account_rejected")
+        self.assertIn("Employee ID does not match", res_rejected.json()["reason"])
+        self.assertNotIn("access_token", res_rejected.json())
+
+        # 3. Suspended account
+        database.users.find_one.return_value = {
+            "_id": ObjectId(),
+            "username": "suspended_user",
+            "password": hashed,
+            "status": "suspended",
+            "is_active": False,
+            "role": "employee",
+        }
+        res_suspended = self.client.post("/api/mobile/auth/login/", {
+            "username": "suspended_user",
+            "password": "Secret123!",
+        }, format="json")
+        self.assertEqual(res_suspended.status_code, 403)
+        self.assertEqual(res_suspended.json()["error"], "account_suspended")
+        self.assertNotIn("access_token", res_suspended.json())
+
+    @patch("core.views.get_database")
+    def test_admin_registration_endpoints_require_admin_permission(self, get_database):
+        # Non-admin user gets 403 Forbidden
+        self.client.force_authenticate(user=self.employee)
+        res = self.client.get("/api/v1/registrations/")
+        self.assertEqual(res.status_code, 403)
+
+        # Admin user gets 200 OK
+        admin_doc = {
+            "_id": ObjectId(),
+            "email": "admin@example.com",
+            "role": "admin",
+            "is_active": True,
+        }
+        admin_user = MongoUser(admin_doc)
+        database = MagicMock()
+        database.users.count_documents.return_value = 0
+        database.users.find.return_value.sort.return_value.skip.return_value.limit.return_value = []
+        get_database.return_value = database
+        self.client.force_authenticate(user=admin_user)
+
+        res_admin = self.client.get("/api/v1/registrations/")
+        self.assertEqual(res_admin.status_code, 200)
+
+    @patch("core.views.get_database")
+    def test_admin_approve_and_reject_flows_with_audit(self, get_database):
+        admin_doc = {
+            "_id": ObjectId(),
+            "email": "admin@example.com",
+            "name": "Admin",
+            "role": "admin",
+            "is_active": True,
+        }
+        admin_user = MongoUser(admin_doc)
+        self.client.force_authenticate(user=admin_user)
+
+        database = MagicMock()
+        target_id = ObjectId()
+        target_doc = {
+            "_id": target_id,
+            "username": "target_tech",
+            "email": "tech@example.com",
+            "name": "Target Tech",
+            "role": "support",
+            "status": "pending",
+            "is_active": False,
+            "created_at": datetime.now(timezone.utc),
+        }
+        database.users.find_one.return_value = target_doc
+        approved_doc = {**target_doc, "status": "active", "is_active": True, "specialties": ["Network"]}
+        database.users.find_one_and_update.return_value = approved_doc
+        get_database.return_value = database
+
+        # Approve
+        res_approve = self.client.post(f"/api/v1/registrations/{target_id}/approve/", {
+            "specialties": ["Network"],
+        }, format="json")
+        self.assertEqual(res_approve.status_code, 200)
+        self.assertEqual(res_approve.json()["data"]["user"]["status"], "active")
+        database.admin_audit.insert_one.assert_called()
+
+        # Reject
+        rejected_doc = {**target_doc, "status": "rejected", "is_active": False, "rejection_reason": "Incomplete profile details"}
+        database.users.find_one_and_update.return_value = rejected_doc
+        res_reject = self.client.post(f"/api/v1/registrations/{target_id}/reject/", {
+            "reason": "Incomplete profile details",
+        }, format="json")
+        self.assertEqual(res_reject.status_code, 200)
+        self.assertEqual(res_reject.json()["data"]["user"]["status"], "rejected")
