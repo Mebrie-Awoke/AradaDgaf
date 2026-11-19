@@ -497,7 +497,17 @@ class TicketDetailView(APIView):
         serializer = TicketUpdateSerializer(data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
         updates = serializer.validated_data.copy()
-        privileged_fields = {"priority", "assigned_to", "status", "category_id", "department_id"}
+        note_text = updates.pop("note", None) or updates.pop("notes", None)
+        if note_text and note_text.strip():
+            database.ticket_comments.insert_one({
+                "ticket_id": ticket["_id"],
+                "author_id": ObjectId(request.user.id),
+                "author_name": getattr(request.user, "name", "Administrator"),
+                "body": note_text.strip(),
+                "internal_only": True,
+                "created_at": now(),
+            })
+        privileged_fields = {"priority", "assigned_to", "status", "category_id", "department_id", "due_date"}
         if request.user.role == "employee":
             if set(updates) - {"status"}:
                 raise PermissionDenied("Employees may only close a resolved ticket.")
