@@ -52,7 +52,7 @@ export default function DashboardPage({ go }) {
   const personnel = users.filter((user) =>
     ["support", "admin"].includes(user.role) && user.is_active !== false
   ).length;
-  const displayValue = (value) => loading && !stats ? "—" : value;
+  const displayValue = (value) => stats ? value : "—";
 
   return <>
     <div className="page-heading">
