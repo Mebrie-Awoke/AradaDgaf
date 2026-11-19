@@ -1,7 +1,5 @@
-from django.conf import settings
 from django.core.files.storage import storages
 from django.core.management.base import BaseCommand, CommandError
-from pymongo import DeleteMany
 
 from core.db import get_database
 
@@ -31,22 +29,20 @@ class Command(BaseCommand):
             )
 
         database = get_database()
-        admin_users = list(database.users.find({"role": "admin"}, {"_id": 1}))
-        admin_ids = [user["_id"] for user in admin_users]
+        admin_count = database.users.count_documents({"role": "admin"})
         non_admin_users = list(database.users.find(
             {"role": {"$in": ["employee", "support"]}},
-            {"_id": 1, "email": 1, "role": 1},
+            {"_id": 1},
         ))
         removed_user_ids = [user["_id"] for user in non_admin_users]
-        tickets = list(database.tickets.find({}, {"_id": 1}))
-        ticket_ids = [ticket["_id"] for ticket in tickets]
+        ticket_count = database.tickets.count_documents({})
         attachments = list(database.attachments.find({}, {"_id": 1, "storage_key": 1}))
 
         self.stdout.write("Reset preview:")
-        self.stdout.write(f"  Tickets: {len(ticket_ids)}")
+        self.stdout.write(f"  Tickets: {ticket_count}")
         self.stdout.write(f"  Employee and IT support accounts: {len(removed_user_ids)}")
         self.stdout.write(f"  Attachments: {len(attachments)}")
-        self.stdout.write(f"  Administrator accounts to preserve: {len(admin_ids)}")
+        self.stdout.write(f"  Administrator accounts to preserve: {admin_count}")
         self.stdout.write("  Departments, categories, and administrator audit history: preserved")
 
         # Remove physical files first. If any file cannot be removed, stop before
