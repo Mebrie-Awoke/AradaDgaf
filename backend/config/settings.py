@@ -19,6 +19,7 @@ from dotenv import load_dotenv
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+load_dotenv(BASE_DIR / ".env")
 load_dotenv(BASE_DIR.parent / ".env")
 
 
@@ -30,8 +31,10 @@ DEBUG = os.getenv("DJANGO_DEBUG", "false").lower() == "true"
 SECRET_KEY = os.getenv("DJANGO_SECRET_KEY") or secrets.token_urlsafe(48)
 
 ALLOWED_HOSTS = [host.strip() for host in os.getenv(
-    "DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1,testserver"
+    "DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1,10.0.2.2,testserver"
 ).split(",") if host.strip()]
+if DEBUG and "*" not in ALLOWED_HOSTS:
+    ALLOWED_HOSTS.append("*")
 
 
 # Application definition
@@ -132,8 +135,10 @@ STATIC_URL = "static/"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 CORS_ALLOWED_ORIGINS = [origin.strip() for origin in os.getenv(
-    "CORS_ALLOWED_ORIGINS", ""
+    "CORS_ALLOWED_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173,http://localhost:3000,http://127.0.0.1:3000"
 ).split(",") if origin.strip()]
+if DEBUG:
+    CORS_ALLOW_ALL_ORIGINS = True
 CORS_ALLOW_CREDENTIALS = False
 
 DATA_UPLOAD_MAX_MEMORY_SIZE = int(os.getenv("MAX_REQUEST_BYTES", str(10 * 1024 * 1024)))
