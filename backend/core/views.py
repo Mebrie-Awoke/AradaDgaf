@@ -279,6 +279,24 @@ class UserDetailView(APIView):
             "action": "user_updated", "target_user_id": target_id,
             "changes": changes, "created_at": now(),
         })
+        if target.get("role") == "support" and (
+            updates.get("role", "support") != "support" or updates.get("is_active") is False
+        ):
+            released = database.tickets.find({
+                "assigned_to": target_id, "status": {"$in": ["assigned", "in_progress"]},
+            })
+            for ticket in released:
+                insert_audit(database, ticket, request.user, "technician_access_removed", {
+                    "assigned_to": str(target_id), "status": "submitted",
+                })
+            database.tickets.update_many(
+                {"assigned_to": target_id},
+                {"$set": {
+                    "assigned_to": None, "assigned_technician": None,
+                    "status": "submitted", "mobile_status": "submitted",
+                    "started_at": None, "updated_at": now(),
+                }, "$inc": {"version": 1}},
+            )
         return success({"user": public_user(updated)})
 
     def delete(self, request, user_id):
