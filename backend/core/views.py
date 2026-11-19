@@ -392,12 +392,12 @@ class TicketDetailView(APIView):
             if "status" in updates:
                 transitions = {
                     "submitted": {"assigned", "in_progress", "resolved"},
-                    "assigned": {"in_progress", "resolved"},
-                    "in_progress": {"assigned", "resolved"},
+                    "assigned": {"submitted", "in_progress", "resolved"},
+                    "in_progress": {"submitted", "assigned", "resolved"},
                     "resolved": {"in_progress", "closed"},
                     "closed": set(),
                 }
-                if updates["status"] not in transitions[ticket["status"]]:
+                if updates["status"] != ticket["status"] and updates["status"] not in transitions[ticket["status"]]:
                     raise ValidationError({"status": f"Cannot change status from {ticket['status']} to {updates['status']}."})
                 if updates["status"] in {"assigned", "in_progress"}:
                     assignee = updates.get("assigned_to", ticket.get("assigned_to"))
