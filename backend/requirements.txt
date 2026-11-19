@@ -3,3 +3,4 @@ djangorestframework>=3.16,<3.17
 pymongo[srv]>=4.10,<5
 django-cors-headers>=4.7,<5
 python-dotenv>=1,<2
+gunicorn>=23,<24
