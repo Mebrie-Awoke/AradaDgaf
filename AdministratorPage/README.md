@@ -23,12 +23,12 @@ Open http://localhost:5173.
 - `POST /api/v1/auth/login/` and `POST /api/v1/auth/logout/`
 - `GET /api/v1/dashboard/`
 - `GET /api/v1/tickets/` and `PATCH /api/v1/tickets/{ticket-id}/`
-- `GET /api/v1/users/`, `POST /api/v1/users/`, `PATCH /api/v1/users/{user-id}/`
+- `GET /api/v1/users/`, `POST /api/v1/users/`, `PATCH /api/v1/users/{user-id}/`, and `DELETE /api/v1/users/{user-id}/`
 - `GET/POST /api/v1/departments/` and `/api/v1/categories/`
-- `PATCH /api/v1/departments/{id}/` and `/api/v1/categories/{id}/`
+- `PATCH` and `DELETE` (soft-deactivate) `/api/v1/departments/{id}/` and `/api/v1/categories/{id}/`
 - `GET /api/v1/admin/audit/`
 
-The portal uses the same MongoDB-backed users, tickets, departments, categories, and bearer-token authentication as the backend. Flutter's separate `/api/mobile/` compatibility routes and source are not modified.
+Staff accounts are provisioned by an authenticated administrator; public self-registration is disabled. The portal supports creating, editing, deactivating, and deleting administrator/IT support accounts. Removing a support account releases active assignments while preserving ticket history. Departments and categories are deactivated rather than physically deleted so historical tickets keep their references.\n\nThe portal uses the same MongoDB-backed users, tickets, departments, categories, and bearer-token authentication as the backend. Flutter's separate `/api/mobile/` compatibility routes and source are not modified.
 
 ## Security notes
 
