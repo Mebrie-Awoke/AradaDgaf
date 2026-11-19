@@ -4,6 +4,8 @@ import '../models/ticket.dart';
 import '../models/user.dart';
 import '../models/notification_item.dart';
 import '../repository/api_ticket_repository.dart';
+import '../repository/mock_ticket_repository.dart';
+import '../repository/ticket_repository.dart';
 
 class TicketDraft {
   ServiceCategory category;
@@ -27,7 +29,12 @@ class TicketDraft {
 }
 
 class AppState extends ChangeNotifier {
-  final ApiTicketRepository repository = ApiTicketRepository();
+  static const bool useMock = bool.fromEnvironment('USE_MOCK', defaultValue: false);
+
+  final TicketRepository repository;
+
+  AppState({TicketRepository? repository})
+      : repository = repository ?? (useMock ? MockTicketRepository() : ApiTicketRepository());
 
   AppLanguage _language = AppLanguage.amharic;
   User? _currentUser;
@@ -35,6 +42,7 @@ class AppState extends ChangeNotifier {
   List<NotificationItem> _notifications = [];
   bool _isLoading = false;
   String? _lastError;
+  ApiException? _lastAuthException;
 
   AppLanguage get language => _language;
   S get s => S(_language);
@@ -43,6 +51,7 @@ class AppState extends ChangeNotifier {
   List<NotificationItem> get notifications => List.unmodifiable(_notifications);
   bool get isLoading => _isLoading;
   String? get lastError => _lastError;
+  ApiException? get lastAuthException => _lastAuthException;
   int get unreadNotificationsCount => _notifications.where((n) => !n.isRead).length;
 
   void _setLoading(bool value) {
@@ -53,11 +62,13 @@ class AppState extends ChangeNotifier {
   Future<bool> login(String username, String password, UserRole role) async {
     _setLoading(true);
     _lastError = null;
+    _lastAuthException = null;
     try {
       try {
         _currentUser = await repository.login(username, password, role);
       } on ApiException catch (error) {
         _lastError = error.message;
+        _lastAuthException = error;
         _currentUser = null;
         return false;
       }
@@ -167,5 +178,56 @@ class AppState extends ChangeNotifier {
       _lastError = error.message;
     }
     notifyListeners();
+  }
+
+  Future<Map<String, dynamic>> register({
+    required UserRole role,
+    required String fullName,
+    required String employeeId,
+    required String username,
+    required String password,
+    required String confirmPassword,
+    required String phone,
+    String? email,
+    required String department,
+    String? workUnit,
+    String? officeLocation,
+    List<String>? specialties,
+    String? qualificationNote,
+  }) async {
+    _setLoading(true);
+    _lastError = null;
+    try {
+      return await repository.register(
+        role: role,
+        fullName: fullName,
+        employeeId: employeeId,
+        username: username,
+        password: password,
+        confirmPassword: confirmPassword,
+        phone: phone,
+        email: email,
+        department: department,
+        workUnit: workUnit,
+        officeLocation: officeLocation,
+        specialties: specialties,
+        qualificationNote: qualificationNote,
+      );
+    } on ApiException catch (error) {
+      _lastError = error.message;
+      rethrow;
+    } finally {
+      _setLoading(false);
+    }
+  }
+
+  Future<Map<String, dynamic>> checkRegistrationStatus({
+    String? referenceNumber,
+    String? username,
+  }) async {
+    return await repository.checkRegistrationStatus(
+      referenceNumber: referenceNumber,
+      username: username,
+    );
   }
 }

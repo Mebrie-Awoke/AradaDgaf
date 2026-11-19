@@ -157,11 +157,58 @@ const Map<String, String> stringsEn = {
   'nav_home': 'Home',
   'nav_my_tickets': 'My Tickets',
   'nav_profile': 'Profile',
+
+  // Registration & Account Approval
+  'register': 'Register',
+  'dont_have_account': 'Don\'t have an account? Register',
+  'create_account': 'Create Account',
+  'registration_step1': 'Account Credentials',
+  'registration_step2': 'Work Details',
+  'full_name': 'Full Name',
+  'employee_id': 'Employee ID',
+  'confirm_password': 'Confirm Password',
+  'password_strength': 'Password strength',
+  'strength_weak': 'Weak',
+  'strength_fair': 'Fair',
+  'strength_strong': 'Strong',
+  'work_unit': 'Work Unit / Division',
+  'email_optional': 'Email Address (Optional)',
+  'specialties': 'Technician Specialties',
+  'qualification_note': 'Qualification Note (Optional)',
+  'registration_confirm_declaration': 'I confirm that all provided employment information is accurate and true.',
+  'submit_registration': 'Submit Registration',
+  'submitting_registration': 'Submitting registration...',
+  'registration_submitted_title': 'Registration Submitted!',
+  'registration_submitted_desc': 'Your registration has been submitted. Your account will become active once an administrator approves your request. Please note that SMS/push notifications are not sent; you can check your approval status using your reference number.',
+  'reference_number': 'Reference Number',
+  'registration_date': 'Registration Date',
+  'check_status': 'Check Status',
+  'back_to_login': 'Back to Login',
+  'pending_approval_title': 'Registration Pending Approval',
+  'pending_approval_desc': 'Your account registration is currently under review by an Arada Subcity administrator. Please check back later.',
+  'registration_rejected_title': 'Registration Not Approved',
+  'rejection_reason_label': 'Administrator\'s Reason',
+  'edit_and_resubmit': 'Edit and Resubmit',
+  'account_suspended_title': 'Account Suspended',
+  'account_suspended_desc': 'This account has been deactivated or suspended. Please contact your system administrator.',
+  'name_min_chars': 'Full name must be at least 3 letters.',
+  'employee_id_invalid': 'Employee ID must be 3-20 characters (letters, digits, "-" or "/").',
+  'username_invalid': 'Username must be 4-20 lowercase letters, digits, "." or "_".',
+  'phone_invalid': 'Enter a valid Ethiopian phone number (e.g. 0911223344).',
+  'password_invalid': 'Password must be at least 8 characters with a letter and a digit.',
+  'passwords_dont_match': 'Passwords do not match.',
+  'department_required': 'Department is required.',
+  'specialties_required': 'Select at least one specialty.',
+  'confirm_required': 'Please confirm the information is correct.',
+  'status_pending_notice': 'Your registration is still awaiting administrator approval.',
+  'status_approved_notice': 'Your account has been approved! You can now log in.',
 };
 
 class S {
   final AppLanguage language;
   S(this.language);
+
+  bool get isAmharic => language.isAmharic;
 
   String get(String key) {
     if (language == AppLanguage.amharic) {

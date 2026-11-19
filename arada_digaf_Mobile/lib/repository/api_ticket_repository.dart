@@ -9,7 +9,11 @@ import 'ticket_repository.dart';
 class ApiException implements Exception {
   final String message;
   final int? statusCode;
-  const ApiException(this.message, {this.statusCode});
+  final String? code;
+  final Map<String, dynamic>? data;
+
+  const ApiException(this.message, {this.statusCode, this.code, this.data});
+
   @override
   String toString() => message;
 }
@@ -57,7 +61,16 @@ class ApiTicketRepository implements TicketRepository {
       await _storage.delete(key: 'arada_access_token');
     }
     if (response.statusCode < 200 || response.statusCode >= 300 || decoded['success'] != true) {
-      throw ApiException(_readableError(decoded['message'] ?? decoded['detail'] ?? decoded['errors']) ?? 'Request failed (${response.statusCode}).', statusCode: response.statusCode);
+      final code = decoded['code'] ?? decoded['error'];
+      final rawData = decoded['data'];
+      final dataMap = rawData is Map<String, dynamic> ? rawData : null;
+      throw ApiException(
+        _readableError(decoded['message'] ?? decoded['detail'] ?? decoded['errors'] ?? decoded['reason']) ??
+            'Request failed (${response.statusCode}).',
+        statusCode: response.statusCode,
+        code: code?.toString(),
+        data: dataMap,
+      );
     }
     final data = decoded['data'];
     if (data is Map<String, dynamic>) return data;
@@ -74,6 +87,7 @@ class ApiTicketRepository implements TicketRepository {
     return value.toString();
   }
 
+  @override
   Future<User> login(String username, String password, UserRole role) async {
     final result = await _request('POST', 'auth/login/', authenticated: false, body: {
       'username': username.trim(), 'password': password,
@@ -94,9 +108,70 @@ class ApiTicketRepository implements TicketRepository {
     );
   }
 
+  @override
   Future<void> logout() async {
     try { await _request('POST', 'auth/logout/'); }
     finally { _token = null; await _storage.delete(key: 'arada_access_token'); }
+  }
+
+  @override
+  Future<Map<String, dynamic>> register({
+    required UserRole role,
+    required String fullName,
+    required String employeeId,
+    required String username,
+    required String password,
+    required String confirmPassword,
+    required String phone,
+    String? email,
+    required String department,
+    String? workUnit,
+    String? officeLocation,
+    List<String>? specialties,
+    String? qualificationNote,
+  }) async {
+    final payload = <String, dynamic>{
+      'role': role == UserRole.employee ? 'employee' : 'technician',
+      'fullName': fullName.trim(),
+      'employeeId': employeeId.trim(),
+      'username': username.trim().toLowerCase(),
+      'password': password,
+      'confirmPassword': confirmPassword,
+      'phone': phone.trim(),
+      'department': department.trim(),
+    };
+    if (email != null && email.trim().isNotEmpty) {
+      payload['email'] = email.trim();
+    }
+    if (workUnit != null && workUnit.trim().isNotEmpty) {
+      payload['workUnit'] = workUnit.trim();
+    }
+    if (officeLocation != null && officeLocation.trim().isNotEmpty) {
+      payload['officeLocation'] = officeLocation.trim();
+    }
+    if (role == UserRole.technician && specialties != null && specialties.isNotEmpty) {
+      payload['specialties'] = specialties;
+    }
+    if (role == UserRole.technician && qualificationNote != null && qualificationNote.trim().isNotEmpty) {
+      payload['qualificationNote'] = qualificationNote.trim();
+    }
+    return await _request('POST', 'auth/register/', authenticated: false, body: payload);
+  }
+
+  @override
+  Future<Map<String, dynamic>> checkRegistrationStatus({
+    String? referenceNumber,
+    String? username,
+  }) async {
+    final params = <String, String>{};
+    if (referenceNumber != null && referenceNumber.isNotEmpty) {
+      params['ref'] = referenceNumber.trim();
+    }
+    if (username != null && username.isNotEmpty) {
+      params['username'] = username.trim();
+    }
+    final queryStr = Uri(queryParameters: params).query;
+    return await _request('GET', 'auth/registration-status/?$queryStr', authenticated: false);
   }
 
   DateTime _date(dynamic value) => DateTime.tryParse('${value ?? ''}')?.toLocal() ?? DateTime.now();
