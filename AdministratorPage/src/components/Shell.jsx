@@ -1,6 +1,3 @@
-
-import { Activity, Boxes, ChevronDown, ClipboardList, LayoutDashboard, LogOut, Menu, ShieldCheck, Users, X } from "lucide-react";
-
 import {
   Activity,
   Boxes,
@@ -304,5 +301,4 @@ export default function Shell({ page, setPage, pendingApprovalsCount = 0, childr
       )}
     </div>
   );
-// Hello feature/e2e-registration-approval
 }
