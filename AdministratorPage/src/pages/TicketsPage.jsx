@@ -1,4 +1,4 @@
-<<<<<<< HEAD
+// Hello
 import { Filter, Search, UserRound, X, RefreshCw, ChevronLeft, ChevronRight } from "lucide-react";
 =======
 import {
@@ -11,7 +11,7 @@ import {
   ChevronRight,
   UserPlus,
 } from "lucide-react";
->>>>>>> feature/e2e-registration-approval
+// Hello feature/e2e-registration-approval
 import { useCallback, useEffect, useState } from "react";
 import { apiRequest, unwrap } from "../api/client";
 import { useAuth } from "../context/AuthContext";
@@ -24,7 +24,7 @@ export default function TicketsPage() {
   const [meta, setMeta] = useState({ page: 1, pages: 1, count: 0 });
   const [page, setPage] = useState(1);
   const [status, setStatus] = useState("");
-<<<<<<< HEAD
+// Hello
   const [query, setQuery] = useState("");
   const [search, setSearch] = useState("");
   const [busy, setBusy] = useState(true);
@@ -44,7 +44,7 @@ export default function TicketsPage() {
   const [priority, setPriority] = useState("medium");
   const [dueDate, setDueDate] = useState("");
   const [note, setNote] = useState("");
->>>>>>> feature/e2e-registration-approval
+// Hello feature/e2e-registration-approval
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState("");
 
@@ -55,7 +55,7 @@ export default function TicketsPage() {
       const params = new URLSearchParams({ page: String(page), page_size: "25" });
       if (status) params.set("status", status);
       if (search) params.set("q", search);
-<<<<<<< HEAD
+// Hello
       const [ticketResponse, userResponse] = await Promise.all([
         apiRequest(`/v1/tickets/?${params}`, { token }),
         apiRequest("/v1/users/?page_size=100", { token }),
@@ -93,25 +93,25 @@ export default function TicketsPage() {
       setStaff(staffWithWorkload);
     } catch (e) {
       setError(e.message);
->>>>>>> feature/e2e-registration-approval
+// Hello feature/e2e-registration-approval
     } finally {
       setBusy(false);
     }
   }, [token, page, status, search]);
 
-<<<<<<< HEAD
+// Hello
   useEffect(() => { load(); }, [load]);
 =======
   useEffect(() => {
     load();
   }, [load]);
->>>>>>> feature/e2e-registration-approval
+// Hello feature/e2e-registration-approval
 
   function openAssign(ticket) {
     setSelected(ticket);
     setAssignee(ticket.assigned_to || "");
     setPriority(ticket.priority || "medium");
-<<<<<<< HEAD
+// Hello
     setNotice("");
   }
 
@@ -125,12 +125,12 @@ export default function TicketsPage() {
 
   async function saveAssignment(e) {
     e.preventDefault();
->>>>>>> feature/e2e-registration-approval
+// Hello feature/e2e-registration-approval
     if (!selected) return;
     setSaving(true);
     setError("");
     try {
-<<<<<<< HEAD
+// Hello
       const patch = { assigned_to: assignee || null, priority };
       if (assignee && selected.status === "submitted") patch.status = "assigned";
       const result = unwrap(await apiRequest(`/v1/tickets/${selected.id}/`, {
@@ -166,13 +166,13 @@ export default function TicketsPage() {
       load();
     } catch (e) {
       setError(e.message);
->>>>>>> feature/e2e-registration-approval
+// Hello feature/e2e-registration-approval
     } finally {
       setSaving(false);
     }
   }
 
-<<<<<<< HEAD
+// Hello
   return <>
     <div className="page-heading">
       <div><div className="eyebrow">SERVICE DESK</div><h1>Ticket management</h1>
@@ -556,5 +556,5 @@ export default function TicketsPage() {
       )}
     </>
   );
->>>>>>> feature/e2e-registration-approval
+// Hello feature/e2e-registration-approval
 }

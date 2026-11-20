@@ -1,6 +1,6 @@
-<<<<<<< HEAD
+
 import { Activity, Boxes, ChevronDown, ClipboardList, LayoutDashboard, LogOut, Menu, ShieldCheck, Users, X } from "lucide-react";
-=======
+
 import {
   Activity,
   Boxes,
@@ -16,7 +16,7 @@ import {
   Users,
   X,
 } from "lucide-react";
->>>>>>> feature/e2e-registration-approval
+
 import { useState } from "react";
 import { useAuth } from "../context/AuthContext";
 
@@ -41,7 +41,6 @@ const mobileBottomNavItems = [
 export default function Shell({ page, setPage, pendingApprovalsCount = 0, children }) {
   const { user, logout } = useAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
-<<<<<<< HEAD
 
   return <div className="app-shell">
     <aside className={`sidebar ${mobileOpen ? "sidebar-open" : ""}`}>
@@ -85,7 +84,7 @@ export default function Shell({ page, setPage, pendingApprovalsCount = 0, childr
       <footer className="footer"><span>AradaDgaf · IT Service Management</span><span>Administrator portal</span></footer>
     </main>
   </div>;
-=======
+
   const [moreSheetOpen, setMoreSheetOpen] = useState(false);
 
   function handleNavClick(id) {
@@ -305,5 +304,5 @@ export default function Shell({ page, setPage, pendingApprovalsCount = 0, childr
       )}
     </div>
   );
->>>>>>> feature/e2e-registration-approval
+// Hello feature/e2e-registration-approval
 }

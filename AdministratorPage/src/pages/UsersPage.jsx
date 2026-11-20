@@ -4,7 +4,7 @@ import { apiRequest, unwrap } from "../api/client";
 import { useAuth } from "../context/AuthContext";
 
 const blank = {
-<<<<<<< HEAD
+// Hello
   name: "", email: "", username: "", password: "", role: "support",
   department_id: "", phone_number: "", office_location: "",
 };
@@ -24,12 +24,12 @@ export default function UsersPage() {
 
 export default function UsersPage() {
   const { token } = useAuth();
->>>>>>> feature/e2e-registration-approval
+// Hello feature/e2e-registration-approval
   const [users, setUsers] = useState([]);
   const [departments, setDepartments] = useState([]);
   const [query, setQuery] = useState("");
   const [modal, setModal] = useState(false);
-<<<<<<< HEAD
+// Hello
   const [editingUser, setEditingUser] = useState(null);
   const [form, setForm] = useState(blank);
   const [error, setError] = useState("");
@@ -66,13 +66,13 @@ export default function UsersPage() {
       setDepartments(unwrap(d) || []);
     } catch (e) {
       setError(e.message);
->>>>>>> feature/e2e-registration-approval
+// Hello feature/e2e-registration-approval
     } finally {
       setBusy(false);
     }
   }
 
-<<<<<<< HEAD
+// Hello
   useEffect(() => { load(); }, [token]);
 
   async function create(event) {
@@ -113,12 +113,12 @@ export default function UsersPage() {
       load();
     } catch (e) {
       setError(e.message);
->>>>>>> feature/e2e-registration-approval
+// Hello feature/e2e-registration-approval
     }
   }
 
   async function update(user, patch) {
-<<<<<<< HEAD
+// Hello
     setError("");
     try {
       await apiRequest(`/v1/users/${user.id}/`, { token, method: "PATCH", body: patch });
@@ -551,5 +551,5 @@ export default function UsersPage() {
       )}
     </>
   );
->>>>>>> feature/e2e-registration-approval
+// Hello feature/e2e-registration-approval
 }
